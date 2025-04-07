@@ -30,6 +30,7 @@ rates = {
 currencies = list(rates.keys())
 trials = []
 
+#overkill i know, but just simulates all possible traversals, valid or not
 for i in range(4):
     for j in range(4):
         for k in range(4):
@@ -48,11 +49,13 @@ best_trial_profit = 0
 best_shell_trial = []
 best_shell_trial_profit = 0
 
+#filter to be a cycle and better than previous
 for trial in trials:
     if trial[-1][1] - 1 >= best_trial_profit and trial[0][0] == trial[-1][0]:
         best_trial = trial
         best_trial_profit = trial[-1][1] - 1
 
+        #check that cycle starts (and ends) on shells
         if trial[0][0] == "shells":
             best_shell_trial = trial
             best_shell_trial_profit = trial[-1][1] - 1
