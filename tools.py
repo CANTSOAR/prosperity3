@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-
+import statsmodels.formula.api as smf
 
 class Plotter:
     
@@ -64,3 +64,14 @@ class Plotter:
 
         plt.tight_layout()
         plt.show()
+
+class Regression:
+
+    @staticmethod
+    def regress(df,x,y,element = "mid_price"):
+        X = df[df["product"]==x][element]
+        Y = df[df["product"]==y][element]
+        df = pd.DataFrame({"input" : X, "output" : Y})
+        model = smf.ols("output ~ input",data = df)
+        results = model.fit()
+        print(results.summary())
