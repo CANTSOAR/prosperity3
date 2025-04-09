@@ -130,7 +130,7 @@ class Regressor:
             plt.show()
             
             # Plot residuals
-            Regression.plot_residuals(df_reg, results)
+            Regressor.plot_residuals(df_reg, results)
         
         return results, df_reg
 
@@ -403,7 +403,7 @@ class ARIMA:
         return np.r_[last, forecasted].cumsum()
 
     def fit(self, lr=1e-2, epochs=300):
-        y_diff = self.difference(self.y, self.d) if self.d > 0 else y.copy()
+        y_diff = self.difference(self.y, self.d) if self.d > 0 else self.y.copy()
 
         # Fit AR(p) using least squares
         if self.p > 0:
@@ -442,7 +442,7 @@ class ARIMA:
         return self
 
     def forecast(self, steps):
-        y_diff = self.difference(self.y, self.d) if self.d > 0 else y.copy()
+        y_diff = self.difference(self.y, self.d) if self.d > 0 else self.y.copy()
         preds = []
 
         history = y_diff.tolist()
