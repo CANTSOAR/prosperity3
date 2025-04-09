@@ -134,7 +134,7 @@ class Regressor:
             plt.show()
             
             # Plot residuals
-            Regression.plot_residuals(df_reg, results)
+            Regressor.plot_residuals(df_reg, results)
         
         return results, df_reg
 
