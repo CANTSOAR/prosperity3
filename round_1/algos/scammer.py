@@ -123,6 +123,12 @@ logger = Logger()
 
 class Trader:
 
+    POSITIONS = {
+        "RAINFOREST_RESIN": 0,
+        "KELP": 0,
+        "SQUID_INK": 0
+    }
+
     LIMITS = {
         "RAINFOREST_RESIN": 50,
         "KELP": 50,
@@ -150,12 +156,9 @@ class Trader:
     def run(self, state: TradingState):
         # Only method required. It takes all buy and sell orders for all symbols as an input, and outputs a list of orders to be sent
         result = {}
-        logger.print(state.position)
-        self.POSITIONS = state.position
-
-        for product in []:
+        for product in ["RAINFOREST_RESIN"]:
             order_depth: OrderDepth = state.order_depths[product]
-            orders = self.compute_orders(product, order_depth, acceptable_bid = 10004, acceptable_ask = 9996, undercut_amount = 0)
+            orders = self.compute_orders(product, order_depth, acceptable_bid = 10000, acceptable_ask = 10000, undercut_amount = 0)
             
             result[product] = orders
     
@@ -185,24 +188,19 @@ class Trader:
 
         current_pos = self.POSITIONS[PRODUCT]
 
+        orders.append(Order(PRODUCT, acceptable_bid - 4, 10)) # BUY order to recuperate at lower price
+        orders.append(Order(PRODUCT, acceptable_ask + 4, -10)) # SELL order to drop at higher price
+
         for ask, vol in ordered_sell_dict.items():
-            if ask < acceptable_ask and current_pos < self.LIMITS[PRODUCT]:
+            if ask <= acceptable_ask and current_pos < self.LIMITS[PRODUCT]:
                 order_vol = min(-vol, self.LIMITS[PRODUCT] - current_pos) # take the minimum of available volume and the volume we are allowed to take
                 orders.append(Order(PRODUCT, ask + undercut_amount, order_vol)) # this is a BUY order, we undercut by paying a little MORE
-                current_pos += order_vol
+                current_pos += order_vol\
 
         for bid, vol in ordered_buy_dict.items():
-            if bid > acceptable_bid and current_pos > -self.LIMITS[PRODUCT]:
+            if bid >= acceptable_bid and current_pos > -self.LIMITS[PRODUCT]:
                 order_vol = max(-vol, -self.LIMITS[PRODUCT] - current_pos) # take the minimum of available volume and the volume we are allowed to take
                 orders.append(Order(PRODUCT, bid - undercut_amount, order_vol)) # this is a SELL order, we undercut by selling a bit CHEAPER
                 current_pos += order_vol
                 
-        if current_pos > -self.LIMITS[PRODUCT]:
-            order_vol = -self.LIMITS[PRODUCT] - current_pos
-            orders.append(Order(PRODUCT, acceptable_ask, order_vol))
-
-        if current_pos < self.LIMITS[PRODUCT]:
-            order_vol = self.LIMITS[PRODUCT] - current_pos
-            orders.append(Order(PRODUCT, acceptable_bid, order_vol))
-
         return orders
