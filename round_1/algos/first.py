@@ -163,7 +163,7 @@ class Trader:
     
         traderData = "SAMPLE" # String value holding Trader state data required. It will be delivered as TradingState.traderData on next execution.
         
-        conversions = 1
+        conversions = 0
         logger.flush(state, result, conversions, traderData)
         return result, conversions, traderData
     
@@ -199,18 +199,8 @@ class Trader:
         bid_pr = min(undercut_buy, acc_bid-1) # we will shift this by 1 to beat this price
         sell_pr = max(undercut_sell, acc_ask+1)
 
-        if (cpos < self.POSITION_LIMIT[product]) and (self.position[product] < 0):
-            num = min(40, self.POSITION_LIMIT[product] - cpos)
-            orders.append(Order(product, min(undercut_buy + 1, acc_bid-1), num))
-            cpos += num
-
-        if (cpos < self.POSITION_LIMIT[product]) and (self.position[product] > 15):
-            num = min(40, self.POSITION_LIMIT[product] - cpos)
-            orders.append(Order(product, min(undercut_buy - 1, acc_bid-1), num))
-            cpos += num
-
         if cpos < self.POSITION_LIMIT[product]:
-            num = min(40, self.POSITION_LIMIT[product] - cpos)
+            num = min(50, self.POSITION_LIMIT[product] - cpos)
             orders.append(Order(product, bid_pr, num))
             cpos += num
         
@@ -224,18 +214,8 @@ class Trader:
                 assert(order_for <= 0)
                 orders.append(Order(product, bid, order_for))
 
-        if (cpos > -self.POSITION_LIMIT[product]) and (self.position[product] > 0):
-            num = max(-40, -self.POSITION_LIMIT[product]-cpos)
-            orders.append(Order(product, max(undercut_sell-1, acc_ask+1), num))
-            cpos += num
-
-        if (cpos > -self.POSITION_LIMIT[product]) and (self.position[product] < -15):
-            num = max(-40, -self.POSITION_LIMIT[product]-cpos)
-            orders.append(Order(product, max(undercut_sell+1, acc_ask+1), num))
-            cpos += num
-
         if cpos > -self.POSITION_LIMIT[product]:
-            num = max(-40, -self.POSITION_LIMIT[product]-cpos)
+            num = max(-50, -self.POSITION_LIMIT[product]-cpos)
             orders.append(Order(product, sell_pr, num))
             cpos += num
 
