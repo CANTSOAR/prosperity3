@@ -69,6 +69,10 @@ class Plotter:
         plt.tight_layout()
         plt.show()
 
+
+
+
+
 class Regressor:
 
     @staticmethod
@@ -126,6 +130,7 @@ class Regressor:
         plt.legend()
         plt.show()
 
+    @staticmethod
     def arima_make_dataset(y, order):
         p, d, q = order
 
@@ -134,11 +139,10 @@ class Regressor:
         for _ in range(d):
             y_diff = np.diff(y_diff)
 
-        # Step 2: Create AR terms (lags of y_diff)
         X_ar = []
         y_targets = []
 
-        for i in range(max(p, q), len(y_diff)):
+        for i in range(max(p, q + 1), len(y_diff)):
             row = []
 
             # AR terms
@@ -154,44 +158,63 @@ class Regressor:
             y_targets.append(y_diff[i])
 
         return np.array(X_ar), np.array(y_targets)
-        # next diff
 
-        return np.array(X), np.array(y_next)
+    @staticmethod
+    def forecast(y, model, order, steps):
+        p, d, q = order
 
-    def forecast(y, model, steps=5, lag=5):
-        dy = list(np.diff(y))
+        # Apply differencing
+        y_diff = y.copy()
+        for _ in range(d):
+            y_diff = np.diff(y_diff)
+        dy = list(y_diff)
+
         preds = []
 
         for _ in range(steps):
-            x_input = np.array(dy[-lag:]).reshape(1, -1)
+            row = []
+
+            if p > 0:
+                row += dy[-p:][::-1]
+
+            if q > 0:
+                residuals = np.array(dy[-q:]) - np.array(dy[-q-1:-1])
+                row += residuals[::-1].tolist()
+
+            x_input = np.array(row).reshape(1, -1)
             dy_pred = model.predict(x_input)[0]
             preds.append(dy_pred)
             dy.append(dy_pred)
 
-        # Convert diffs back to full values
+        # Inverse differencing to get actual y values
         return np.cumsum([y[-1]] + preds)[1:]
-    
-    def eval_model(y, model, steps=5, lag=5, training_split = .7):
+
+    @staticmethod
+    def eval_model(y, model, order, steps, training_split = .7):
+        p, d, q = order
         train_index = int(len(y) * training_split)
 
         preds = []
         reals = []
 
-        with tqdm(total = len(y) - train_index, desc = "Evaluating Arima") as pbar:
-            while train_index < len(y):
+        with tqdm(total=len(y) - train_index, desc="Evaluating ARIMA") as pbar:
+            while train_index + steps <= len(y):
+                y_train = y[:train_index]
+                y_real = y[train_index:train_index + steps]
 
-                preds = preds + Regressor.forecast(y[:train_index], model, steps, lag).tolist()
-                reals = reals + y[train_index - steps: train_index].tolist()
-
-                pbar.update(steps)
+                y_pred = Regressor.forecast(y_train, model, steps=steps, order=order)
+                preds.extend(y_pred)
+                reals.extend(y_real)
 
                 train_index += steps
+                pbar.update(steps)
 
-        plt.plot(reals, label = "Real Values")
-        plt.plot(preds, label = "Arima Predictions")
-
+        plt.plot(reals, label="Real Values")
+        plt.plot(preds, label="ARIMA Predictions")
         plt.legend()
+        plt.title(f"ARIMA{order} Model Evaluation")
         plt.show()
+
 
 class ARIMA:
     def __init__(self, y, order):
@@ -213,7 +236,7 @@ class ARIMA:
         return np.r_[last, forecasted].cumsum()
 
     def fit(self, lr=1e-2, epochs=300):
-        y_diff = self.difference(self.y, self.d) if self.d > 0 else y.copy()
+        y_diff = self.difference(self.y, self.d) if self.d > 0 else self.y.copy()
 
         # Fit AR(p) using least squares
         if self.p > 0:
@@ -252,7 +275,7 @@ class ARIMA:
         return self
 
     def forecast(self, steps):
-        y_diff = self.difference(self.y, self.d) if self.d > 0 else y.copy()
+        y_diff = self.difference(self.y, self.d) if self.d > 0 else self.y.copy()
         preds = []
 
         history = y_diff.tolist()
