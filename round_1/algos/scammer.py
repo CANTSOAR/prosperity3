@@ -123,6 +123,12 @@ logger = Logger()
 
 class Trader:
 
+    POSITIONS = {
+        "RAINFOREST_RESIN": 0,
+        "KELP": 0,
+        "SQUID_INK": 0
+    }
+
     LIMITS = {
         "RAINFOREST_RESIN": 50,
         "KELP": 50,
@@ -150,18 +156,15 @@ class Trader:
     def run(self, state: TradingState):
         # Only method required. It takes all buy and sell orders for all symbols as an input, and outputs a list of orders to be sent
         result = {}
-        logger.print(state.position)
-        self.POSITIONS = state.position
-
-        for product in []:
+        for product in ["RAINFOREST_RESIN"]:
             order_depth: OrderDepth = state.order_depths[product]
-            orders = self.compute_orders(product, order_depth, acceptable_bid = 10004, acceptable_ask = 9996, undercut_amount = 0)
+            orders = self.compute_orders(product, order_depth, acceptable_bid = 10000, acceptable_ask = 10000, undercut_amount = 0)
             
             result[product] = orders
     
         traderData = "SAMPLE" # String value holding Trader state data required. It will be delivered as TradingState.traderData on next execution.
         
-        conversions = 0
+        conversions = 1
         logger.flush(state, result, conversions, traderData)
         return result, conversions, traderData
     
@@ -185,65 +188,19 @@ class Trader:
 
         current_pos = self.POSITIONS[PRODUCT]
 
-        mx_with_buy = -1
+        orders.append(Order(PRODUCT, acceptable_bid - 4, 10)) # BUY order to recuperate at lower price
+        orders.append(Order(PRODUCT, acceptable_ask + 4, -10)) # SELL order to drop at higher price
 
-        for ask, vol in osell.items():
-            if ((ask < acc_bid) or ((self.position[product]<0) and (ask == acc_bid))) and cpos < self.POSITION_LIMIT[product]:
-                mx_with_buy = max(mx_with_buy, ask)
-                order_for = min(-vol, self.POSITION_LIMIT[product] - cpos)
-                cpos += order_for
-                assert(order_for >= 0)
-                orders.append(Order(product, ask, order_for))
+        for ask, vol in ordered_sell_dict.items():
+            if ask <= acceptable_ask and current_pos < self.LIMITS[PRODUCT]:
+                order_vol = min(-vol, self.LIMITS[PRODUCT] - current_pos) # take the minimum of available volume and the volume we are allowed to take
+                orders.append(Order(PRODUCT, ask + undercut_amount, order_vol)) # this is a BUY order, we undercut by paying a little MORE
+                current_pos += order_vol\
 
-        mprice_actual = (best_sell_pr + best_buy_pr)/2
-        mprice_ours = (acc_bid+acc_ask)/2
-
-        undercut_amt = 3
-
-        undercut_buy = best_buy_pr + undercut_amt
-        undercut_sell = best_sell_pr - undercut_amt
-
-        bid_pr = min(undercut_buy, acc_bid-1) # we will shift this by 1 to beat this price
-        sell_pr = max(undercut_sell, acc_ask+1)
-
-        if (cpos < self.POSITION_LIMIT[product]) and (self.position[product] < 0):
-            num = min(40, self.POSITION_LIMIT[product] - cpos)
-            orders.append(Order(product, min(undercut_buy + 1, acc_bid-1), num))
-            cpos += num
-
-        if (cpos < self.POSITION_LIMIT[product]) and (self.position[product] > 15):
-            num = min(40, self.POSITION_LIMIT[product] - cpos)
-            orders.append(Order(product, min(undercut_buy - 1, acc_bid-1), num))
-            cpos += num
-
-        if cpos < self.POSITION_LIMIT[product]:
-            num = min(40, self.POSITION_LIMIT[product] - cpos)
-            orders.append(Order(product, bid_pr, num))
-            cpos += num
-        
-        cpos = self.position[product]
-
-        for bid, vol in obuy.items():
-            if ((bid > acc_ask) or ((self.position[product]>0) and (bid == acc_ask))) and cpos > -self.POSITION_LIMIT[product]:
-                order_for = max(-vol, -self.POSITION_LIMIT[product]-cpos)
-                # order_for is a negative number denoting how much we will sell
-                cpos += order_for
-                assert(order_for <= 0)
-                orders.append(Order(product, bid, order_for))
-
-        if (cpos > -self.POSITION_LIMIT[product]) and (self.position[product] > 0):
-            num = max(-40, -self.POSITION_LIMIT[product]-cpos)
-            orders.append(Order(product, max(undercut_sell-1, acc_ask+1), num))
-            cpos += num
-
-        if (cpos > -self.POSITION_LIMIT[product]) and (self.position[product] < -15):
-            num = max(-40, -self.POSITION_LIMIT[product]-cpos)
-            orders.append(Order(product, max(undercut_sell+1, acc_ask+1), num))
-            cpos += num
-
-        if cpos > -self.POSITION_LIMIT[product]:
-            num = max(-40, -self.POSITION_LIMIT[product]-cpos)
-            orders.append(Order(product, sell_pr, num))
-            cpos += num
-
+        for bid, vol in ordered_buy_dict.items():
+            if bid >= acceptable_bid and current_pos > -self.LIMITS[PRODUCT]:
+                order_vol = max(-vol, -self.LIMITS[PRODUCT] - current_pos) # take the minimum of available volume and the volume we are allowed to take
+                orders.append(Order(PRODUCT, bid - undercut_amount, order_vol)) # this is a SELL order, we undercut by selling a bit CHEAPER
+                current_pos += order_vol
+                
         return orders
