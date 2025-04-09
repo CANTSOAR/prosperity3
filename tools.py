@@ -285,13 +285,15 @@ class Regressor:
         plt.show()
 
     @staticmethod
-    def quick_arima(df_data, product, element = "mid_price", seasonal = False, stepwise = False, suppress_warnings = True, print = True):
+    def quick_arima(df_data, product, element = "mid_price", seasonal = False, stepwise = False, suppress_warnings = True, print = True, need_model = True):
         df = df_data[df_data["product"] == product][element]
 
         model = pm.auto_arima(df.values, seasonal = seasonal, stepwise = stepwise, suppress_warnings = suppress_warnings, trace = print)
         order = model.order
 
-        model = ARIMA(df.values, order = order).fit()
+        if need_model: model = ARIMA(df.values, order = order).fit()
+        else: model = None
+        
         return model, order
     
     @staticmethod

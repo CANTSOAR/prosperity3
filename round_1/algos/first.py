@@ -150,12 +150,12 @@ class Trader:
     def run(self, state: TradingState):
         # Only method required. It takes all buy and sell orders for all symbols as an input, and outputs a list of orders to be sent
         result = {}
-        logger.print(state.position)
         self.POSITIONS = state.position
 
-        for product in []:
+        for product in ["RAINFOREST_RESIN"]:
             order_depth: OrderDepth = state.order_depths[product]
-            orders = self.compute_orders(product, order_depth, acceptable_bid = 10004, acceptable_ask = 9996, undercut_amount = 0)
+            
+            orders = self.compute_orders(product, order_depth, acceptable_bid = 10001, acceptable_ask = 9999, undercut_amount = 1)
             
             result[product] = orders
     
@@ -165,6 +165,14 @@ class Trader:
         logger.flush(state, result, conversions, traderData)
         return result, conversions, traderData
     
+    def midprice(self, product, order_depth):
+
+        returns = {
+            "RAINFOREST_RESIN": 10000,
+            "SQUID_INK": self.calc_squid_ink_mid_price(product, order_depth),
+            "KELP": self.calc_kelp_mid_price(product, order_depth)
+        }
+
     def compute_orders(self, PRODUCT, order_depth, acceptable_bid, acceptable_ask, undercut_amount):
         """
         LOGIC:
@@ -177,32 +185,38 @@ class Trader:
         acceptable_ask: the HIGHEST price that we are willing to BUY at
         """
 
-
         orders: list[Order] = []
 
         ordered_sell_dict = collections.OrderedDict(sorted(order_depth.sell_orders.items()))
         ordered_buy_dict = collections.OrderedDict(sorted(order_depth.buy_orders.items(), reverse=True))
 
-        current_pos = self.POSITIONS[PRODUCT]
+        current_pos = self.POSITIONS.get(PRODUCT, 0)
+
+        best_remaining_ask = [ask for ask, _ in ordered_sell_dict.items()][-1]
+        best_remaining_bid = [bid for bid, _ in ordered_buy_dict.items()][-1]
 
         for ask, vol in ordered_sell_dict.items():
-            if ask < acceptable_ask and current_pos < self.LIMITS[PRODUCT]:
+            if ask <= acceptable_ask and current_pos < self.LIMITS[PRODUCT]:
                 order_vol = min(-vol, self.LIMITS[PRODUCT] - current_pos) # take the minimum of available volume and the volume we are allowed to take
-                orders.append(Order(PRODUCT, ask + undercut_amount, order_vol)) # this is a BUY order, we undercut by paying a little MORE
+                orders.append(Order(PRODUCT, ask, order_vol)) # this is a BUY order, we undercut by paying a little MORE
                 current_pos += order_vol
+            elif ask < best_remaining_ask:
+                best_remaining_ask = ask
 
         for bid, vol in ordered_buy_dict.items():
-            if bid > acceptable_bid and current_pos > -self.LIMITS[PRODUCT]:
+            if bid >= acceptable_bid and current_pos > -self.LIMITS[PRODUCT]:
                 order_vol = max(-vol, -self.LIMITS[PRODUCT] - current_pos) # take the minimum of available volume and the volume we are allowed to take
-                orders.append(Order(PRODUCT, bid - undercut_amount, order_vol)) # this is a SELL order, we undercut by selling a bit CHEAPER
+                orders.append(Order(PRODUCT, bid, order_vol)) # this is a SELL order, we undercut by selling a bit CHEAPER
                 current_pos += order_vol
-                
-        if current_pos > -self.LIMITS[PRODUCT]:
-            order_vol = -self.LIMITS[PRODUCT] - current_pos
-            orders.append(Order(PRODUCT, acceptable_ask, order_vol))
+            elif bid > best_remaining_bid:
+                best_remaining_bid = bid
 
-        if current_pos < self.LIMITS[PRODUCT]:
-            order_vol = self.LIMITS[PRODUCT] - current_pos
-            orders.append(Order(PRODUCT, acceptable_bid, order_vol))
+        if current_pos > -self.LIMITS[PRODUCT] and best_remaining_ask > acceptable_ask:
+            order_vol = int((-self.LIMITS[PRODUCT] - current_pos) * .7)
+            orders.append(Order(PRODUCT, best_remaining_ask - undercut_amount, order_vol))
+
+        if current_pos < self.LIMITS[PRODUCT] and best_remaining_bid < acceptable_bid:
+            order_vol = int((self.LIMITS[PRODUCT] - current_pos) * .7)
+            orders.append(Order(PRODUCT, best_remaining_bid + undercut_amount, order_vol))
 
         return orders
