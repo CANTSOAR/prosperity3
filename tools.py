@@ -83,7 +83,7 @@ class Regressor:
             X_product: df_data[df_data["product"] == X_product][element],
             Y_product: df_data[df_data["product"] == Y_product][element]
         })
-        Regressor.linear_regression(df, [X_product], Y_product)
+        Regressor.regression(df, [X_product], Y_product)
     """
     A class for performing different types of regression analysis on financial time series data.
     """
@@ -293,7 +293,7 @@ class Regressor:
 
         if need_model: model = ARIMA(df.values, order = order).fit()
         else: model = None
-        
+
         return model, order
     
     @staticmethod
@@ -406,7 +406,6 @@ class Regressor:
         plt.legend()
         plt.title(f"ARIMA{order} Model Evaluation")
         plt.show()
-
 
 class ARIMA:
     def __init__(self, y, order):

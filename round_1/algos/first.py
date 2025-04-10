@@ -3,6 +3,9 @@ import string
 import collections
 import json
 from typing import Any
+import numpy as np
+import pandas as pd
+
 from datamodel import Listing, Observation, Order, OrderDepth, ProsperityEncoder, Symbol, Trade, TradingState
 
 class Logger:
@@ -129,8 +132,22 @@ class Trader:
         "SQUID_INK": 50
     }
 
-    resin_short = 0
-    resin_long = 0
+    BIDS = {
+        "RAINFOREST_RESIN": [],
+        "KELP": [2028],
+        "SQUID_INK": []
+    }
+
+    ASKS = {
+        "RAINFOREST_RESIN": [],
+        "KELP": [2032],
+        "SQUID_INK": []
+    }
+
+    kelp_last_bid = 2028
+    kelp_last_ask = 2032
+
+    ink_lock = False
 
     def values_extract(self, order_dict, buy=0):
         tot_vol = 0
@@ -152,10 +169,19 @@ class Trader:
         result = {}
         self.POSITIONS = state.position
 
-        for product in ["RAINFOREST_RESIN"]:
+        COMPUTE_ORDERS = {
+            "RAINFOREST_RESIN": self.compute_orders_resin,
+            "SQUID_INK": self.compute_orders_ink,
+            "KELP": self.compute_orders_kelp
+        }
+
+        for product in [
+            "RAINFOREST_RESIN",
+            "SQUID_INK",
+            "KELP"
+        ]:
             order_depth: OrderDepth = state.order_depths[product]
-            
-            orders = self.compute_orders(product, order_depth, acceptable_bid = 10001, acceptable_ask = 9999, undercut_amount = 1)
+            orders = COMPUTE_ORDERS[product](product, order_depth)
             
             result[product] = orders
     
@@ -164,16 +190,8 @@ class Trader:
         conversions = 0
         logger.flush(state, result, conversions, traderData)
         return result, conversions, traderData
-    
-    def midprice(self, product, order_depth):
 
-        returns = {
-            "RAINFOREST_RESIN": 10000,
-            "SQUID_INK": self.calc_squid_ink_mid_price(product, order_depth),
-            "KELP": self.calc_kelp_mid_price(product, order_depth)
-        }
-
-    def compute_orders(self, PRODUCT, order_depth, acceptable_bid, acceptable_ask, undercut_amount):
+    def compute_orders_resin(self, PRODUCT, order_depth):
         """
         LOGIC:
 
@@ -194,6 +212,11 @@ class Trader:
 
         best_remaining_ask = [ask for ask, _ in ordered_sell_dict.items()][-1]
         best_remaining_bid = [bid for bid, _ in ordered_buy_dict.items()][-1]
+
+        acceptable_ask = 9999
+        acceptable_bid = 10001
+
+        undercut_amount = 1
 
         for ask, vol in ordered_sell_dict.items():
             if ask <= acceptable_ask and current_pos < self.LIMITS[PRODUCT]:
@@ -220,3 +243,192 @@ class Trader:
             orders.append(Order(PRODUCT, best_remaining_bid + undercut_amount, order_vol))
 
         return orders
+
+    def compute_orders_kelp(self, PRODUCT, order_depth):
+        """
+        LOGIC:
+        
+        acceptable_bid and acceptable_ask are fake variables, dont actually do anything
+
+        on each round, we recalculate a baseline value, by just seeing if we have two in a row
+
+        then, set acceptable_bid to TWO above the baseline bid, and acceptable_ask to TWO below the baseline ask, not sure why, felt right
+
+        then, logic is, SELL to any bid orders above the acceptable bid, because these are 'OVER VALUED'
+        on flip side, BUY any ask orders below the acceptable ask, because these are 'UNDER VALUED'
+
+        market taking ^^^
+
+        then, make passive bids one above the baseline, 
+        """
+        orders: list[Order] = []
+
+        ordered_sell_dict = collections.OrderedDict(sorted(order_depth.sell_orders.items()))
+        ordered_buy_dict = collections.OrderedDict(sorted(order_depth.buy_orders.items(), reverse=True))
+
+        current_pos = self.POSITIONS.get(PRODUCT, 0)
+
+        best_remaining_ask = [ask for ask, _ in ordered_sell_dict.items()][-1]
+        best_remaining_bid = [bid for bid, _ in ordered_buy_dict.items()][-1]
+
+        best_ask = [ask for ask, _ in ordered_sell_dict.items()][0]
+        best_bid = [bid for bid, _ in ordered_buy_dict.items()][0]
+
+        if best_ask == self.kelp_last_ask:
+            self.ASKS[PRODUCT].append(best_ask)
+        else:
+            self.ASKS[PRODUCT].append(self.ASKS[PRODUCT][-1])
+            self.kelp_last_ask = best_ask
+
+        if best_bid == self.kelp_last_bid:
+            self.BIDS[PRODUCT].append(best_bid)
+        else:
+            self.BIDS[PRODUCT].append(self.BIDS[PRODUCT][-1])
+            self.kelp_last_bid = best_bid
+
+        acceptable_ask = self.ASKS[PRODUCT][-1] - 2
+        acceptable_bid = self.BIDS[PRODUCT][-1] + 2
+
+        undercut_amount = 1
+
+        for ask, vol in ordered_sell_dict.items():
+            if ask <= acceptable_ask and current_pos < self.LIMITS[PRODUCT]:
+                order_vol = min(-vol, self.LIMITS[PRODUCT] - current_pos) # take the minimum of available volume and the volume we are allowed to take
+                orders.append(Order(PRODUCT, ask, order_vol)) # this is a BUY order, we undercut by paying a little MORE
+                current_pos += order_vol
+            elif ask < best_remaining_ask:
+                best_remaining_ask = ask
+
+        for bid, vol in ordered_buy_dict.items():
+            if bid >= acceptable_bid and current_pos > -self.LIMITS[PRODUCT]:
+                order_vol = max(-vol, -self.LIMITS[PRODUCT] - current_pos) # take the minimum of available volume and the volume we are allowed to take
+                orders.append(Order(PRODUCT, bid, order_vol)) # this is a SELL order, we undercut by selling a bit CHEAPER
+                current_pos += order_vol
+            elif bid > best_remaining_bid:
+                best_remaining_bid = bid
+
+        if current_pos > -self.LIMITS[PRODUCT] and best_remaining_ask > acceptable_ask:
+            order_vol = int((-self.LIMITS[PRODUCT] - current_pos) * .7)
+            orders.append(Order(PRODUCT, best_remaining_ask - undercut_amount, order_vol))
+
+        if current_pos < self.LIMITS[PRODUCT] and best_remaining_bid < acceptable_bid:
+            order_vol = int((self.LIMITS[PRODUCT] - current_pos) * .3)
+            orders.append(Order(PRODUCT, best_remaining_bid + undercut_amount, order_vol))
+
+        return orders
+    
+    def compute_orders_ink(self, PRODUCT, order_depth):
+        orders: list[Order] = []
+
+        ordered_sell_dict = collections.OrderedDict(sorted(order_depth.sell_orders.items()))
+        ordered_buy_dict = collections.OrderedDict(sorted(order_depth.buy_orders.items(), reverse=True))
+
+        current_pos = self.POSITIONS.get(PRODUCT, 0)
+
+        best_ask = [ask for ask, _ in ordered_sell_dict.items()][0]
+        best_bid = [bid for bid, _ in ordered_buy_dict.items()][0]
+
+        self.ASKS[PRODUCT].append(best_ask)
+        self.BIDS[PRODUCT].append(best_bid)
+
+        mid_prices = (pd.Series(self.ASKS[PRODUCT]) + pd.Series(self.BIDS[PRODUCT])) / 2
+
+        lookback = 100
+
+        if len(mid_prices) > lookback:
+            moving_average = mid_prices.rolling(lookback).mean()
+            standard_dev = mid_prices.rolling(lookback).std()
+
+            #moving_average, standard_dev = self.kalman_mean_std(mid_prices, q = .01, r = .1, alpha = .15)
+            #mid_prices = mid_prices.values
+
+            #band_z_score = 1.5
+            #upper_band = moving_average + band_z_score * standard_dev
+            #lower_band = moving_average - band_z_score * standard_dev
+
+            if standard_dev.values[-1] < 1:
+                return orders
+
+            z_score = (mid_prices.values[-1] - moving_average.values[-1]) / standard_dev.values[-1]
+            prev_z_score = (mid_prices.values[-2] - moving_average.values[-2]) / standard_dev.values[-2]
+
+            z_score_thresh = 1.7
+            z_score_severe_thresh = 2.25
+
+            logger.print(f"z-score: {z_score}")
+
+            for ask, vol in list(ordered_sell_dict.items())[:2]:
+                
+                z_cross = z_score < -z_score_thresh and prev_z_score < -z_score_thresh
+                severe_cross = z_score < z_score_severe_thresh
+
+                if (z_cross or severe_cross) and current_pos < self.LIMITS[PRODUCT]:
+                    order_vol = min(-vol, self.LIMITS[PRODUCT] - current_pos)
+                    orders.append(Order(PRODUCT, ask, order_vol))
+                    current_pos += order_vol
+
+                    if severe_cross:
+                        self.ink_lock = True
+                    else:
+                        self.ink_lock = False
+
+                ask_cross_mid = z_score < 0
+
+                if ask_cross_mid and current_pos < 0 and not self.ink_lock:
+                    order_vol = min(-vol, -current_pos)
+                    orders.append(Order(PRODUCT, ask, order_vol))
+                    current_pos += order_vol
+
+            for bid, vol in list(ordered_buy_dict.items())[:2]:
+
+                z_cross = z_score > z_score_thresh and prev_z_score > z_score_thresh
+                severe_cross = z_score > z_score_severe_thresh
+
+                if (z_cross or severe_cross) and current_pos > -self.LIMITS[PRODUCT]:
+                    order_vol = max(-vol, -self.LIMITS[PRODUCT] - current_pos)
+                    orders.append(Order(PRODUCT, bid, order_vol))
+                    current_pos += order_vol
+
+                    if severe_cross:
+                        self.ink_lock = True
+                    else:
+                        self.ink_lock = False
+
+                bid_cross_mid = z_score > 0
+
+                if bid_cross_mid and current_pos > 0 and not self.ink_lock:
+                    order_vol = max(-vol, -current_pos)
+                    orders.append(Order(PRODUCT, bid, order_vol))
+                    current_pos += order_vol
+
+        return orders
+    
+    def kalman_mean_std(self, prices: pd.Series, q=0.001, r=1.0, alpha=0.05):
+
+        n = len(prices)
+        mu = np.zeros(n)
+        P = np.zeros(n)
+        K = np.zeros(n)
+
+        mu[0] = prices.iloc[0]
+        P[0] = 1.0
+        smoothed_std = np.zeros(n)
+        smoothed_std[0] = 0.0
+
+        for k in range(1, n):
+            # Predict
+            mu_pred = mu[k-1]
+            P_pred = P[k-1] + q
+
+            # Kalman Gain
+            K[k] = P_pred / (P_pred + r)
+
+            # Update
+            mu[k] = mu_pred + K[k] * (prices.iloc[k] - mu_pred)
+            P[k] = (1 - K[k]) * P_pred
+
+            # Update smoothed std dev using exponential moving average of squared error
+            residual = prices.iloc[k] - mu[k]
+            smoothed_std[k] = np.sqrt((1 - alpha) * smoothed_std[k-1]**2 + alpha * residual**2)
+
+        return mu, smoothed_std

@@ -3,7 +3,7 @@ import string
 import collections
 import json
 from typing import Any
-from datamodel import Listing, Observation, Order, OrderDepth, ProsperityEncoder, Symbol, Trade, TradingState
+from round_1.algos.datamodel import Listing, Observation, Order, OrderDepth, ProsperityEncoder, Symbol, Trade, TradingState
 
 class Logger:
     def __init__(self) -> None:
