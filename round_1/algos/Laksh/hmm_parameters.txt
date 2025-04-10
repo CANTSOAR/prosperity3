@@ -1,0 +1,32 @@
+# ============================================================
+# HMM PARAMETERS (Hard-code these offline-trained values)
+# Assume a 3-state HMM.
+#   pi: initial state probabilities, shape (3,)
+#   A: state transition matrix, shape (3, 3)
+#   means: emission means for each state, shape (3,)
+#   stds: emission standard deviations for each state, shape (3,)
+# ============================================================
+
+pi = [
+  0.000000,
+  0.000000,
+  1.000000
+]
+
+A = [
+  [0.036166, 0.963834, 0.000000],
+  [0.407486, 0.592514, 0.000000],
+  [0.000069, 0.000000, 0.999931],
+]
+
+means = [
+  1873.943683,
+  2020.548436,
+  1964.852742
+]
+
+stds = [
+  31.028891,
+  71.553839,
+  22.764139
+]
