@@ -393,7 +393,7 @@ class Trader:
     def compute_orders_basket_1(self, PRODUCT, order_depth):
         orders: list[Order] = []
 
-        COMPONENTS = ["CROISSANTS", "JAMS", "DJEMBES", "KELP"]
+        COMPONENTS = ["CROISSANTS", "JAMS", "DJEMBES"]
         for COMPONENT in COMPONENTS:
             component_order_depth = self.state.order_depths[COMPONENT]
 
@@ -418,77 +418,51 @@ class Trader:
         best_ask = [ask for ask, _ in ordered_sell_dict.items()][0]
         best_bid = [bid for bid, _ in ordered_buy_dict.items()][0]
 
-        best_remaining_ask = [ask for ask, _ in ordered_sell_dict.items()][-1]
-        best_remaining_bid = [bid for bid, _ in ordered_buy_dict.items()][-1]
-
-        undercut_amount = 1
-
         self.ASKS[PRODUCT].append(best_ask)
         self.BIDS[PRODUCT].append(best_bid)
 
         mid_prices = (pd.Series(self.ASKS[PRODUCT]) + pd.Series(self.BIDS[PRODUCT])) / 2
+        if len(mid_prices) < 5:
+            return orders
+
+        hedge_ratio = 1.00082419531
+        mean_spread = .0547467078
+        std_spread = 83.5605701
 
         component_mid_prices = np.array([(pd.Series(self.ASKS[COMPONENT]) + pd.Series(self.BIDS[COMPONENT])) / 2 for COMPONENT in COMPONENTS])
+        estimated_mid_prices = component_mid_prices.T @ np.array([6, 3, 1]) * hedge_ratio
 
-        given_weights = np.array([6.8417, 1.1320, 0.5989, 13.3389])
-        regression_coef = 1
-        regression_intercept = -1.299e+04
+        spread = mid_prices.values - estimated_mid_prices
+        z_score = (spread - mean_spread) / std_spread
 
-        estimated_mid_prices = regression_coef * (component_mid_prices.T @ given_weights) + regression_intercept
+        z_score_reversal_threshold = 1.96
+        z_score_push_threshold = .5
 
-        spread = pd.Series(mid_prices - estimated_mid_prices)
+        long_reversal_entry = z_score[-1] > z_score[-2] and z_score[-2] < -z_score_reversal_threshold
+        short_reversal_entry = z_score[-1] < z_score[-2] and z_score[-2] > z_score_reversal_threshold
 
-        lookback = 100
+        z_moving_average = pd.Series(z_score).rolling(5).mean()
 
-        if len(spread) > lookback:
-            moving_average = spread.ewm(span = lookback).mean()
-            standard_dev = spread.ewm(span = lookback).std()
+        long_push_entry = z_score[-1] > z_score_push_threshold and z_moving_average.values[-2] < z_score_push_threshold
+        short_push_entry = z_score[-1] < -z_score_push_threshold and z_moving_average.values[-2] > -z_score_push_threshold
 
-            z_score = (spread.values[-1] - moving_average.values[-1]) / standard_dev.values[-1]
-            prev_z_score = (spread.values[-2] - moving_average.values[-2]) / standard_dev.values[-2]
-            z_score_reversal_thresh = 1.96
-            z_score_burst_thresh = 1
+        exit = abs(z_score[-1]) < .3
 
-            #if spread is super positive, then ETF is too high, sell
-            #if spread is super negative, then ETF is too low, buy
-            long_entry = (z_score > -z_score_reversal_thresh and prev_z_score < -z_score_reversal_thresh)
-            short_entry = (z_score < z_score_reversal_thresh and prev_z_score > z_score_reversal_thresh)
-
-            #self.exit_basket_1 = z_score * prev_z_score <= 0 or self.exit_basket_1
-
-            logger.print(f"current spread: {spread.values[-1]}")
-            logger.print(f"current z_score: {z_score}")
-            logger.print(f"lat z_score: {prev_z_score}")
-
-            long_entry = spread.values[-1] < -50 and spread.rolling(12).mean().values[-1] > spread.rolling(20).mean().values[-1]
-            short_entry = spread.values[-1] > 50 and spread.rolling(12).mean().values[-1] < spread.rolling(20).mean().values[-1]
-
-            exit = abs(spread.values[-1]) < 5
-
-            for ask, vol in list(ordered_sell_dict.items()):
-                if long_entry and current_pos < self.LIMITS[PRODUCT]:
-                    order_vol = min(-vol, self.LIMITS[PRODUCT] - current_pos)
-                    orders.append(Order(PRODUCT, ask, order_vol))
-                    current_pos += order_vol
-                elif ask < best_remaining_ask:
-                    best_remaining_ask = ask
-
-            for bid, vol in list(ordered_buy_dict.items()):
-                if short_entry and current_pos > -self.LIMITS[PRODUCT]:
-                    order_vol = max(-vol, -self.LIMITS[PRODUCT] - current_pos)
-                    orders.append(Order(PRODUCT, bid, order_vol))
-                    current_pos += order_vol
-                elif bid > best_remaining_bid:
-                    best_remaining_bid = bid
-
-            if exit and current_pos < 0:
-                order_vol = -current_pos
-                orders.append(Order(PRODUCT, best_remaining_bid + undercut_amount, order_vol))
+        logger.print(z_score[-1], z_score[-2], z_moving_average.values[-1])
+        logger.print(long_reversal_entry, long_push_entry)
+        logger.print(short_push_entry, short_reversal_entry)
+        logger.print(exit)
+        
+        for ask, vol in list(ordered_sell_dict.items()):
+            if (long_reversal_entry or long_push_entry) and current_pos < self.LIMITS[PRODUCT] or (exit and current_pos < 0):
+                order_vol = min(-vol, self.LIMITS[PRODUCT] - current_pos)
+                orders.append(Order(PRODUCT, ask, order_vol))
                 current_pos += order_vol
 
-            if exit and current_pos > 0:
-                order_vol = -current_pos
-                orders.append(Order(PRODUCT, best_remaining_ask - undercut_amount, order_vol))
+        for bid, vol in list(ordered_buy_dict.items()):
+            if (short_reversal_entry or short_push_entry) and current_pos > -self.LIMITS[PRODUCT] or (exit and current_pos > 0):
+                order_vol = max(-vol, -self.LIMITS[PRODUCT] - current_pos)
+                orders.append(Order(PRODUCT, bid, order_vol))
                 current_pos += order_vol
 
         return orders

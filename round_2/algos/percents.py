@@ -393,7 +393,7 @@ class Trader:
     def compute_orders_basket_1(self, PRODUCT, order_depth):
         orders: list[Order] = []
 
-        COMPONENTS = ["CROISSANTS", "JAMS", "DJEMBES", "KELP"]
+        COMPONENTS = ["CROISSANTS", "JAMS", "DJEMBES"]
         for COMPONENT in COMPONENTS:
             component_order_depth = self.state.order_depths[COMPONENT]
 
@@ -430,40 +430,23 @@ class Trader:
 
         component_mid_prices = np.array([(pd.Series(self.ASKS[COMPONENT]) + pd.Series(self.BIDS[COMPONENT])) / 2 for COMPONENT in COMPONENTS])
 
-        given_weights = np.array([6.8417, 1.1320, 0.5989, 13.3389])
-        regression_coef = 1
-        regression_intercept = -1.299e+04
+        if len(mid_prices) > 2:
 
-        estimated_mid_prices = regression_coef * (component_mid_prices.T @ given_weights) + regression_intercept
+            estimated_mid_prices = pd.Series(component_mid_prices.T @ np.array([6, 3, 1]))
+            estimated_mid_price_changes = estimated_mid_prices.pct_change()[1:] + 1
+            estimated_mid_prices = mid_prices.values[:-1] * estimated_mid_price_changes
 
-        spread = pd.Series(mid_prices - estimated_mid_prices)
-
-        lookback = 100
-
-        if len(spread) > lookback:
-            moving_average = spread.ewm(span = lookback).mean()
-            standard_dev = spread.ewm(span = lookback).std()
-
-            z_score = (spread.values[-1] - moving_average.values[-1]) / standard_dev.values[-1]
-            prev_z_score = (spread.values[-2] - moving_average.values[-2]) / standard_dev.values[-2]
-            z_score_reversal_thresh = 1.96
-            z_score_burst_thresh = 1
+            spread = pd.Series(mid_prices[1:] - estimated_mid_prices)
 
             #if spread is super positive, then ETF is too high, sell
             #if spread is super negative, then ETF is too low, buy
-            long_entry = (z_score > -z_score_reversal_thresh and prev_z_score < -z_score_reversal_thresh)
-            short_entry = (z_score < z_score_reversal_thresh and prev_z_score > z_score_reversal_thresh)
 
-            #self.exit_basket_1 = z_score * prev_z_score <= 0 or self.exit_basket_1
+            #empirically determine/assume that mean is 0, and stdev is 3
+            z_score = (spread.values[-1] - 0) / 3
+            long_entry = z_score < -2
+            short_entry = z_score > 2
 
-            logger.print(f"current spread: {spread.values[-1]}")
-            logger.print(f"current z_score: {z_score}")
-            logger.print(f"lat z_score: {prev_z_score}")
-
-            long_entry = spread.values[-1] < -50 and spread.rolling(12).mean().values[-1] > spread.rolling(20).mean().values[-1]
-            short_entry = spread.values[-1] > 50 and spread.rolling(12).mean().values[-1] < spread.rolling(20).mean().values[-1]
-
-            exit = abs(spread.values[-1]) < 5
+            logger.print(spread.values[-1], z_score)
 
             for ask, vol in list(ordered_sell_dict.items()):
                 if long_entry and current_pos < self.LIMITS[PRODUCT]:
