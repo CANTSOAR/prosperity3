@@ -435,13 +435,13 @@ class Trader:
         spread = mid_prices.values - estimated_mid_prices
         z_score = (spread - mean_spread) / std_spread
 
-        z_score_reversal_threshold = 1.96
-        z_score_push_threshold = .5
+        z_moving_average = pd.Series(z_score).rolling(25).mean()
 
-        long_reversal_entry = z_score[-1] > z_score[-2] and z_score[-2] < -z_score_reversal_threshold
-        short_reversal_entry = z_score[-1] < z_score[-2] and z_score[-2] > z_score_reversal_threshold
+        z_score_reversal_threshold = 1.5
+        z_score_push_threshold = 10
 
-        z_moving_average = pd.Series(z_score).rolling(5).mean()
+        long_reversal_entry = z_score[-1] > z_score[-2] and z_moving_average.values[-2] < -z_score_reversal_threshold
+        short_reversal_entry = z_score[-1] < z_score[-2] and z_moving_average.values[-2] > z_score_reversal_threshold
 
         long_push_entry = z_score[-1] > z_score_push_threshold and z_moving_average.values[-2] < z_score_push_threshold
         short_push_entry = z_score[-1] < -z_score_push_threshold and z_moving_average.values[-2] > -z_score_push_threshold
@@ -453,6 +453,14 @@ class Trader:
         logger.print(short_push_entry, short_reversal_entry)
         logger.print(exit)
         
+        long_reversal_entry = z_score[-1] > z_score[-2] and z_moving_average.values[-2] < -z_score_reversal_threshold
+        short_reversal_entry = z_score[-1] > z_score[-2] and z_moving_average.values[-2] < -z_score_reversal_threshold
+
+        long_push_entry = z_score[-1] > 0 and z_moving_average.values[-2] < 0
+        short_push_entry = z_score[-1] < 0 and z_moving_average.values[-2] > 0
+
+        exit = False
+
         for ask, vol in list(ordered_sell_dict.items()):
             if (long_reversal_entry or long_push_entry) and current_pos < self.LIMITS[PRODUCT] or (exit and current_pos < 0):
                 order_vol = min(-vol, self.LIMITS[PRODUCT] - current_pos)
