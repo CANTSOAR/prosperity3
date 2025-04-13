@@ -179,6 +179,19 @@ class Trader:
         
         return tot_vol, best_val
     
+    def populate_prices(self):
+        for COMPONENT in ["CROISSANTS", "JAMS", "DJEMBES", "PICNIC_BASKET1", "PICNIC_BASKET2"]:
+            component_order_depth = self.state.order_depths[COMPONENT]
+
+            ordered_sell_dict = collections.OrderedDict(sorted(component_order_depth.sell_orders.items()))
+            ordered_buy_dict = collections.OrderedDict(sorted(component_order_depth.buy_orders.items(), reverse=True))
+
+            best_ask = [ask for ask, _ in ordered_sell_dict.items()][0]
+            best_bid = [bid for bid, _ in ordered_buy_dict.items()][0]
+
+            self.ASKS[COMPONENT].append(best_ask)
+            self.BIDS[COMPONENT].append(best_bid)
+    
     def run(self, state: TradingState):
         # Only method required. It takes all buy and sell orders for all symbols as an input, and outputs a list of orders to be sent
         result = {}
@@ -189,11 +202,14 @@ class Trader:
             "RAINFOREST_RESIN": self.compute_orders_resin,
             "SQUID_INK": self.compute_orders_ink,
             "KELP": self.compute_orders_kelp,
-            "PICNIC_BASKET1": self.compute_orders_basket_1
+            "PICNIC_BASKET1": self.compute_orders_basket_1,
+            "PICNIC_BASKET2": self.compute_orders_basket_2,
         }
 
+        self.populate_prices()
+
         for product in [
-            "PICNIC_BASKET1"
+            "PICNIC_BASKET1",
         ]:
             order_depth: OrderDepth = state.order_depths[product]
             orders = COMPUTE_ORDERS[product](product, order_depth)
@@ -388,38 +404,16 @@ class Trader:
                     current_pos += order_vol
 
         return orders
-
     
     def compute_orders_basket_1(self, PRODUCT, order_depth):
         orders: list[Order] = []
 
         COMPONENTS = ["CROISSANTS", "JAMS", "DJEMBES"]
-        for COMPONENT in COMPONENTS:
-            component_order_depth = self.state.order_depths[COMPONENT]
-
-            ordered_sell_dict = collections.OrderedDict(sorted(component_order_depth.sell_orders.items()))
-            ordered_buy_dict = collections.OrderedDict(sorted(component_order_depth.buy_orders.items(), reverse=True))
-
-            current_pos = self.POSITIONS.get(COMPONENT, 0)
-
-            best_ask = [ask for ask, _ in ordered_sell_dict.items()][0]
-            best_bid = [bid for bid, _ in ordered_buy_dict.items()][0]
-
-            self.ASKS[COMPONENT].append(best_ask)
-            self.BIDS[COMPONENT].append(best_bid)
-
-        component_order_depth = self.state.order_depths[PRODUCT]
 
         ordered_sell_dict = collections.OrderedDict(sorted(order_depth.sell_orders.items()))
         ordered_buy_dict = collections.OrderedDict(sorted(order_depth.buy_orders.items(), reverse=True))
 
         current_pos = self.POSITIONS.get(PRODUCT, 0)
-
-        best_ask = [ask for ask, _ in ordered_sell_dict.items()][0]
-        best_bid = [bid for bid, _ in ordered_buy_dict.items()][0]
-
-        self.ASKS[PRODUCT].append(best_ask)
-        self.BIDS[PRODUCT].append(best_bid)
 
         mid_prices = (pd.Series(self.ASKS[PRODUCT]) + pd.Series(self.BIDS[PRODUCT])) / 2
         if len(mid_prices) < 20:
@@ -433,14 +427,14 @@ class Trader:
         bid_spread = pd.Series(self.BIDS[PRODUCT]).values - estimated_mid_prices
         ask_spread = pd.Series(self.ASKS[PRODUCT]).values - estimated_mid_prices
 
-        bid_z_score = ((bid_spread - pd.Series(bid_spread).rolling(20).mean()) / pd.Series(bid_spread).rolling(20).std()).values
-        ask_z_score = ((ask_spread - pd.Series(ask_spread).rolling(20).mean()) / pd.Series(ask_spread).rolling(20).std()).values
+        bid_z_score = (bid_spread - -4.56786589) / 83.56360149
+        ask_z_score = (ask_spread - 4.67735931) / 83.55753942
 
-        z_score_reversal_threshold = 1.7
+        z_score_reversal_threshold = 2
         z_score_push_threshold = 10
 
-        long_reversal_entry = ask_z_score[-1] > ask_z_score[-2] and ask_z_score[-2] < -z_score_reversal_threshold
-        short_reversal_entry = bid_z_score[-1] < bid_z_score[-2] and bid_z_score[-2] > z_score_reversal_threshold
+        long_reversal_entry = ask_z_score[-1] > ask_z_score[-2] and ask_z_score[-1] < -z_score_reversal_threshold
+        short_reversal_entry = bid_z_score[-1] < bid_z_score[-2] and bid_z_score[-1] > z_score_reversal_threshold
 
         long_push_entry = False
         short_push_entry = False
@@ -450,7 +444,62 @@ class Trader:
         logger.print(bid_z_score[-1], ask_z_score[-1])
         logger.print(long_reversal_entry, long_push_entry)
         logger.print(short_push_entry, short_reversal_entry)
-        logger.print(exit, current_pos)
+        logger.print(exit, current_pos) 
+
+        for ask, vol in list(ordered_sell_dict.items()):
+            if (long_reversal_entry or long_push_entry) and current_pos < self.LIMITS[PRODUCT] or (exit and current_pos < 0):
+                order_vol = min(-vol, self.LIMITS[PRODUCT] - current_pos)
+                orders.append(Order(PRODUCT, ask, order_vol))
+                current_pos += order_vol
+
+        for bid, vol in list(ordered_buy_dict.items()):
+            if (short_reversal_entry or short_push_entry) and current_pos > -self.LIMITS[PRODUCT] or (exit and current_pos > 0):
+                order_vol = max(-vol, -self.LIMITS[PRODUCT] - current_pos)
+                orders.append(Order(PRODUCT, bid, order_vol))
+                current_pos += order_vol
+
+        return orders
+    
+    def compute_orders_basket_2(self, PRODUCT, order_depth):
+        orders: list[Order] = []
+
+        COMPONENTS = ["CROISSANTS", "JAMS"]
+
+        ordered_sell_dict = collections.OrderedDict(sorted(order_depth.sell_orders.items()))
+        ordered_buy_dict = collections.OrderedDict(sorted(order_depth.buy_orders.items(), reverse=True))
+
+        current_pos = self.POSITIONS.get(PRODUCT, 0)
+
+        mid_prices = (pd.Series(self.ASKS[PRODUCT]) + pd.Series(self.BIDS[PRODUCT])) / 2
+        if len(mid_prices) < 20:
+            return orders
+
+        hedge_ratio = 1
+
+        component_mid_prices = np.array([(pd.Series(self.ASKS[COMPONENT]) + pd.Series(self.BIDS[COMPONENT])) / 2 for COMPONENT in COMPONENTS])
+        estimated_mid_prices = component_mid_prices.T @ np.array([4, 2]) * hedge_ratio
+
+        bid_spread = pd.Series(self.BIDS[PRODUCT]).values - estimated_mid_prices
+        ask_spread = pd.Series(self.ASKS[PRODUCT]).values - estimated_mid_prices
+
+        bid_z_score = ((bid_spread - pd.Series(bid_spread).rolling(20).mean()) / pd.Series(bid_spread).rolling(20).std()).values
+        ask_z_score = ((ask_spread - pd.Series(ask_spread).rolling(20).mean()) / pd.Series(ask_spread).rolling(20).std()).values
+
+        z_score_reversal_threshold = 2
+        z_score_push_threshold = 10
+
+        long_reversal_entry = ask_z_score[-1] > ask_z_score[-2] and ask_z_score[-1] < -z_score_reversal_threshold
+        short_reversal_entry = bid_z_score[-1] < bid_z_score[-2] and bid_z_score[-1] > z_score_reversal_threshold
+
+        long_push_entry = False
+        short_push_entry = False
+
+        exit = False
+
+        logger.print(bid_z_score[-1], ask_z_score[-1])
+        logger.print(long_reversal_entry, long_push_entry)
+        logger.print(short_push_entry, short_reversal_entry)
+        logger.print(exit, current_pos) 
 
         for ask, vol in list(ordered_sell_dict.items()):
             if (long_reversal_entry or long_push_entry) and current_pos < self.LIMITS[PRODUCT] or (exit and current_pos < 0):

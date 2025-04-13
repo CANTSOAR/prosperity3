@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import statsmodels.formula.api as smf
-import pmdarima as pm
+#import pmdarima as pm
 #from statsmodels.tsa.arima.model import ARIMA
 from tqdm import tqdm
 
@@ -620,7 +620,7 @@ class Log_Analysis:
             name="Our Buys",
             text=our_buys["timestamp"].map(lambda_logs).map(summarize_log),
             hoverinfo="text",
-            marker=dict(color="green", symbol="circle")
+            marker=dict(color="green", symbol="arrow-up", size = 12)
         ))
 
         # Our sells
@@ -631,7 +631,7 @@ class Log_Analysis:
             name="Our Sells",
             text=our_sells["timestamp"].map(lambda_logs).map(summarize_log),
             hoverinfo="text",
-            marker=dict(color="red", symbol="x")
+            marker=dict(color="red", symbol="arrow-down", size = 12)
         ))
 
         fig.update_layout(title=f"{product} Price and Trades with Hover Logs",
