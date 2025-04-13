@@ -422,44 +422,35 @@ class Trader:
         self.BIDS[PRODUCT].append(best_bid)
 
         mid_prices = (pd.Series(self.ASKS[PRODUCT]) + pd.Series(self.BIDS[PRODUCT])) / 2
-        if len(mid_prices) < 5:
+        if len(mid_prices) < 20:
             return orders
 
         hedge_ratio = 1.00082419531
-        mean_spread = .0547467078
-        std_spread = 83.5605701
 
         component_mid_prices = np.array([(pd.Series(self.ASKS[COMPONENT]) + pd.Series(self.BIDS[COMPONENT])) / 2 for COMPONENT in COMPONENTS])
         estimated_mid_prices = component_mid_prices.T @ np.array([6, 3, 1]) * hedge_ratio
 
-        spread = mid_prices.values - estimated_mid_prices
-        z_score = (spread - mean_spread) / std_spread
+        bid_spread = pd.Series(self.BIDS[PRODUCT]).values - estimated_mid_prices
+        ask_spread = pd.Series(self.ASKS[PRODUCT]).values - estimated_mid_prices
 
-        z_moving_average = pd.Series(z_score).rolling(25).mean()
+        bid_z_score = ((bid_spread - pd.Series(bid_spread).rolling(20).mean()) / pd.Series(bid_spread).rolling(20).std()).values
+        ask_z_score = ((ask_spread - pd.Series(ask_spread).rolling(20).mean()) / pd.Series(ask_spread).rolling(20).std()).values
 
-        z_score_reversal_threshold = 1.5
+        z_score_reversal_threshold = 1.7
         z_score_push_threshold = 10
 
-        long_reversal_entry = z_score[-1] > z_score[-2] and z_moving_average.values[-2] < -z_score_reversal_threshold
-        short_reversal_entry = z_score[-1] < z_score[-2] and z_moving_average.values[-2] > z_score_reversal_threshold
+        long_reversal_entry = ask_z_score[-1] > ask_z_score[-2] and ask_z_score[-2] < -z_score_reversal_threshold
+        short_reversal_entry = bid_z_score[-1] < bid_z_score[-2] and bid_z_score[-2] > z_score_reversal_threshold
 
-        long_push_entry = z_score[-1] > z_score_push_threshold and z_moving_average.values[-2] < z_score_push_threshold
-        short_push_entry = z_score[-1] < -z_score_push_threshold and z_moving_average.values[-2] > -z_score_push_threshold
-
-        exit = abs(z_score[-1]) < .3
-
-        logger.print(z_score[-1], z_score[-2], z_moving_average.values[-1])
-        logger.print(long_reversal_entry, long_push_entry)
-        logger.print(short_push_entry, short_reversal_entry)
-        logger.print(exit)
-        
-        long_reversal_entry = z_score[-1] > z_score[-2] and z_moving_average.values[-2] < -z_score_reversal_threshold
-        short_reversal_entry = z_score[-1] > z_score[-2] and z_moving_average.values[-2] < -z_score_reversal_threshold
-
-        long_push_entry = z_score[-1] > 0 and z_moving_average.values[-2] < 0
-        short_push_entry = z_score[-1] < 0 and z_moving_average.values[-2] > 0
+        long_push_entry = False
+        short_push_entry = False
 
         exit = False
+
+        logger.print(bid_z_score[-1], ask_z_score[-1])
+        logger.print(long_reversal_entry, long_push_entry)
+        logger.print(short_push_entry, short_reversal_entry)
+        logger.print(exit, current_pos)
 
         for ask, vol in list(ordered_sell_dict.items()):
             if (long_reversal_entry or long_push_entry) and current_pos < self.LIMITS[PRODUCT] or (exit and current_pos < 0):

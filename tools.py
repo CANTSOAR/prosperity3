@@ -9,6 +9,11 @@ from tqdm import tqdm
 import statsmodels.robust.robust_linear_model as rlm
 import statsmodels.api as sm
 
+import os
+import json
+from io import StringIO
+import re
+
 class Plotter:
     
     @staticmethod
@@ -485,3 +490,193 @@ class ARIMA:
             preds = self.inverse_difference(preds)
 
         return preds
+    
+
+import os
+import json
+import re
+import pandas as pd
+from io import StringIO
+import plotly.graph_objects as go
+
+class Log_Analysis:
+
+    def analyse(self, product, file_index=-1, backtest_or_submission=True):
+        folder = "backtests" if backtest_or_submission else "submissions"
+        full_path = os.path.relpath(folder)
+
+        if not os.path.exists(full_path):
+            raise FileNotFoundError(f"Folder {full_path} does not exist")
+
+        files = sorted([
+            os.path.join(full_path, f)
+            for f in os.listdir(full_path)
+            if os.path.isfile(os.path.join(full_path, f))
+        ])
+
+        file = files[file_index]
+        sandbox_lines = []
+        activity_lines = []
+        trade_lines = []
+
+        with open(file, "r", encoding="utf-8") as f:
+            sandbox_section = False
+            activity_section = False
+            trade_section = False
+
+            for line in f:
+                line = line.strip()
+
+                if line == "Sandbox logs:":
+                    sandbox_section = True
+                    continue
+
+                if line == "Activities log:":
+                    activity_section = True
+                    sandbox_section = False
+                    continue
+
+                if line == "Trade History:":
+                    activity_section = False
+                    trade_section = True
+                    continue
+
+                if sandbox_section:
+                    sandbox_lines.append(line)
+                elif activity_section:
+                    activity_lines.append(line)
+                elif trade_section:
+                    trade_lines.append(line)
+
+        # Parse sandbox logs
+        sandbox_json = self.parse_multiple_json_objects(sandbox_lines)
+
+        lambda_logs = {
+            entry["timestamp"]: json.loads(entry["lambdaLog"])
+            for entry in sandbox_json
+        }
+
+        # Parse activities
+        activity_content = "\n".join(activity_lines)
+        prices = pd.read_csv(StringIO(activity_content), sep=";")
+        prices.index = prices["timestamp"]
+
+        # Parse trades
+        trades_content = "\n".join(trade_lines)
+        trades_content = re.sub(r',\s*(\}|\])', r'\1', trades_content)
+        trade_json = json.loads(trades_content)
+        trades = pd.DataFrame(trade_json)
+        trades["timestamp"] = trades["timestamp"].astype(int)
+        trades.index = trades["timestamp"]
+
+        # Filter by product
+        product_prices = prices[prices["product"] == product]
+        trades = trades[trades["symbol"] == product]
+        our_buys = trades[trades["buyer"] == "SUBMISSION"]
+        our_sells = trades[trades["seller"] == "SUBMISSION"]
+
+        # Simplified hover text
+        def summarize_log(log):
+            return log[-1]
+
+        product_prices["hover_text"] = product_prices["timestamp"].map(
+            lambda ts: summarize_log(lambda_logs.get(ts, []))
+        )
+
+        trades["hover_text"] = trades["timestamp"].map(
+            lambda ts: summarize_log(lambda_logs.get(ts, []))
+        )
+
+        # Plot using Plotly
+        fig = go.Figure()
+
+        # Price line
+        fig.add_trace(go.Scatter(
+            x=product_prices.index,
+            y=product_prices["mid_price"],
+            mode="lines",
+            name="Prices",
+            text=product_prices["hover_text"],
+            hoverinfo="text",
+            line=dict(color="black")
+        ))
+
+        # All trades
+        fig.add_trace(go.Scatter(
+            x=trades.index,
+            y=trades["price"],
+            mode="markers",
+            name="All Trades",
+            text=trades["hover_text"],
+            hoverinfo="text",
+            marker=dict(color="blue")
+        ))
+
+        # Our buys
+        fig.add_trace(go.Scatter(
+            x=our_buys.index,
+            y=our_buys["price"],
+            mode="markers",
+            name="Our Buys",
+            text=our_buys["timestamp"].map(lambda_logs).map(summarize_log),
+            hoverinfo="text",
+            marker=dict(color="green", symbol="circle")
+        ))
+
+        # Our sells
+        fig.add_trace(go.Scatter(
+            x=our_sells.index,
+            y=our_sells["price"],
+            mode="markers",
+            name="Our Sells",
+            text=our_sells["timestamp"].map(lambda_logs).map(summarize_log),
+            hoverinfo="text",
+            marker=dict(color="red", symbol="x")
+        ))
+
+        fig.update_layout(title=f"{product} Price and Trades with Hover Logs",
+                          xaxis_title="Timestamp",
+                          yaxis_title="Price",
+                          hovermode="closest")
+
+        fig.write_html(
+            "plots/plot_output.html",
+            auto_open=True,
+            config={"scrollZoom": True, "displaylogo": False}
+        )
+
+    def parse_multiple_json_objects(self, lines):
+        objects = []
+        buffer = []
+        depth = 0
+        in_object = False
+
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                continue
+
+            if not in_object and "{" in stripped:
+                in_object = True
+
+            if in_object:
+                buffer.append(line)
+                depth += line.count("{")
+                depth -= line.count("}")
+
+                if depth == 0:
+                    try:
+                        joined = "\n".join(buffer)
+                        obj = json.loads(joined)
+                        objects.append(obj)
+                    except json.JSONDecodeError as e:
+                        print(f"[!] Failed to parse JSON object:\n{joined[:200]}...\nError: {e}")
+                    buffer = []
+                    in_object = False
+
+        return objects
+
+
+
+pray = Log_Analysis()
+pray.analyse("PICNIC_BASKET1")
