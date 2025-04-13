@@ -601,6 +601,42 @@ class Log_Analysis:
             line=dict(color="black")
         ))
 
+        # Price line
+        fig.add_trace(go.Scatter(
+            x=product_prices.index,
+            y=product_prices["bid_price_1"],
+            mode="lines",
+            name="Bids",
+            line=dict(color="green")
+        ))
+
+        # Price line
+        fig.add_trace(go.Scatter(
+            x=product_prices.index,
+            y=product_prices["ask_price_1"],
+            mode="lines",
+            name="Asks",
+            line=dict(color="red")
+        ))
+
+         # Price line
+        fig.add_trace(go.Scatter(
+            x=product_prices.index,
+            y=product_prices["bid_price_2"],
+            mode="lines",
+            name="Bids",
+            line=dict(color="green")
+        ))
+
+        # Price line
+        fig.add_trace(go.Scatter(
+            x=product_prices.index,
+            y=product_prices["ask_price_2"],
+            mode="lines",
+            name="Asks",
+            line=dict(color="red")
+        ))
+
         # All trades
         fig.add_trace(go.Scatter(
             x=trades.index,
@@ -620,7 +656,7 @@ class Log_Analysis:
             name="Our Buys",
             text=our_buys["timestamp"].map(lambda_logs).map(summarize_log),
             hoverinfo="text",
-            marker=dict(color="green", symbol="circle")
+            marker=dict(color="green", symbol="arrow-up", size = 12)
         ))
 
         # Our sells
@@ -631,7 +667,7 @@ class Log_Analysis:
             name="Our Sells",
             text=our_sells["timestamp"].map(lambda_logs).map(summarize_log),
             hoverinfo="text",
-            marker=dict(color="red", symbol="x")
+            marker=dict(color="red", symbol="arrow-down", size = 12)
         ))
 
         fig.update_layout(title=f"{product} Price and Trades with Hover Logs",
@@ -677,6 +713,8 @@ class Log_Analysis:
         return objects
 
 
-
-pray = Log_Analysis()
-pray.analyse("PICNIC_BASKET1")
+if __name__ == "__main__":
+    pray = Log_Analysis()
+    pray.analyse("CROISSANTS")
+    pray.analyse("JAMS")
+    pray.analyse("DJEMBES")
