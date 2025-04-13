@@ -135,6 +135,7 @@ class Trader:
         "DJEMBES": 60,
         "PICNIC_BASKET1": 60,
         "PICNIC_BASKET2": 100
+        
     }
 
     BIDS = {
@@ -194,6 +195,7 @@ class Trader:
     
     def run(self, state: TradingState):
         # Only method required. It takes all buy and sell orders for all symbols as an input, and outputs a list of orders to be sent
+        self.exit = False
         result = {}
         self.state = state
         self.POSITIONS = state.position
@@ -210,7 +212,7 @@ class Trader:
 
         for product in [
             "PICNIC_BASKET1",
-            "PICNIC_BASKET2",
+            "PICNIC_BASKET2"
         ]:
             order_depth: OrderDepth = state.order_depths[product]
             orders = COMPUTE_ORDERS[product](product, order_depth)
@@ -409,7 +411,7 @@ class Trader:
     def compute_orders_basket_1(self, PRODUCT, order_depth):
         orders: list[Order] = []
 
-        COMPONENTS = ["CROISSANTS", "JAMS", "DJEMBES"]
+        COMPONENTS = ["CROISSANTS", "JAMS","DJEMBES"]
 
         ordered_sell_dict = collections.OrderedDict(sorted(order_depth.sell_orders.items()))
         ordered_buy_dict = collections.OrderedDict(sorted(order_depth.buy_orders.items(), reverse=True))
@@ -423,14 +425,14 @@ class Trader:
             return orders
 
         component_mid_prices = np.array([(pd.Series(self.ASKS[COMPONENT]) + pd.Series(self.BIDS[COMPONENT])) / 2 for COMPONENT in COMPONENTS])
-        estimated_mid_prices = component_mid_prices.T @ np.array([6, 3, 1])
+        estimated_mid_prices = component_mid_prices.T @ np.array([6, 1, 3])
         
         X = estimated_mid_prices[-lookback:].reshape(-1, 1)
         y = mid_prices[-lookback:]
 
         hedge_ratio = np.linalg.lstsq(X, y, rcond=None)[0][0]
 
-        estimated_mid_prices *= 1
+        estimated_mid_prices *= 1.0008
 
         bid_spread = pd.Series(self.BIDS[PRODUCT]).values - estimated_mid_prices
         ask_spread = pd.Series(self.ASKS[PRODUCT]).values - estimated_mid_prices
@@ -464,6 +466,7 @@ class Trader:
                 current_pos += order_vol
 
         return orders
+   
     
     def compute_orders_basket_2(self, PRODUCT, order_depth):
         orders: list[Order] = []
@@ -489,7 +492,7 @@ class Trader:
 
         hedge_ratio = np.linalg.lstsq(X, y, rcond=None)[0][0]
 
-        estimated_mid_prices *= 1
+        estimated_mid_prices *= 1.0007
 
         bid_spread = pd.Series(self.BIDS[PRODUCT]).values - estimated_mid_prices
         ask_spread = pd.Series(self.ASKS[PRODUCT]).values - estimated_mid_prices
@@ -591,14 +594,10 @@ class Trader:
 
         current_pos = self.POSITIONS.get(PRODUCT, 0)
 
-        undercut_ammount = 1
-
         best_ask = [ask for ask, _ in list(ordered_sell_dict.items())][0]
         best_bid = [bid for bid, _ in list(ordered_buy_dict.items())][0]
 
-        orders.append(Order(PRODUCT, best_ask - undercut_ammount, int((self.LIMITS[PRODUCT] - current_pos) * .7)))
-        orders.append(Order(PRODUCT, best_bid + undercut_ammount, int((-self.LIMITS[PRODUCT] - current_pos) * .7)))
+        orders.append(Order(PRODUCT, best_ask - 1, int((self.LIMITS[PRODUCT] - current_pos) * .7)))
+        orders.append(Order(PRODUCT, best_bid + 1, int((-self.LIMITS[PRODUCT] - current_pos) * .7)))
 
         return orders
-
-    
