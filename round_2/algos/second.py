@@ -438,7 +438,7 @@ class Trader:
 		spread = mid_prices.values - estimated_mid_prices
 		z_score = (spread - mean_spread) / std_spread
 
-		z_score_threshold = 1.3git
+		z_score_threshold = 1.3
 
 		long_entry = z_score[-1] < -z_score_threshold
 		short_entry = z_score[-1] > z_score_threshold

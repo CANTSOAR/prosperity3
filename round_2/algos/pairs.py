@@ -439,8 +439,8 @@ class Trader:
         z_score_reversal_threshold = 1.7
         z_score_push_threshold = 10
 
-        long_reversal_entry = ask_z_score[-1] > ask_z_score[-2] and ask_z_score[-2] < -z_score_reversal_threshold
-        short_reversal_entry = bid_z_score[-1] < bid_z_score[-2] and bid_z_score[-2] > z_score_reversal_threshold
+        long_reversal_entry = ask_z_score[-1] < -z_score_reversal_threshold
+        short_reversal_entry = bid_z_score[-1] > z_score_reversal_threshold
 
         long_push_entry = False
         short_push_entry = False
@@ -452,13 +452,13 @@ class Trader:
         logger.print(short_push_entry, short_reversal_entry)
         logger.print(exit, current_pos)
 
-        for ask, vol in list(ordered_sell_dict.items()):
+        for ask, vol in list(ordered_sell_dict.items())[:1]:
             if (long_reversal_entry or long_push_entry) and current_pos < self.LIMITS[PRODUCT] or (exit and current_pos < 0):
                 order_vol = min(-vol, self.LIMITS[PRODUCT] - current_pos)
                 orders.append(Order(PRODUCT, ask, order_vol))
                 current_pos += order_vol
 
-        for bid, vol in list(ordered_buy_dict.items()):
+        for bid, vol in list(ordered_buy_dict.items())[:1]:
             if (short_reversal_entry or short_push_entry) and current_pos > -self.LIMITS[PRODUCT] or (exit and current_pos > 0):
                 order_vol = max(-vol, -self.LIMITS[PRODUCT] - current_pos)
                 orders.append(Order(PRODUCT, bid, order_vol))
