@@ -440,8 +440,8 @@ class Trader:
 
 		z_score_threshold = 1.3
 
-		long_entry = mid_prices[-1] < .9995 * estimated_mid_prices[-1]
-		short_entry = mid_prices[-1] > 1.0005 * estimated_mid_prices[-1]
+		long_entry = z_score[-1] < -z_score_threshold
+		short_entry = z_score[-1] > z_score_threshold
 		
 		logger.print(z_score[-1])
 		
@@ -684,3 +684,4 @@ class Trader:
 				logger.print(f"URGENT position reduction: Buying {buy_size} @ {buy_price}")
 
 		return orders
+		
