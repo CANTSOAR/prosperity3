@@ -707,8 +707,8 @@ class Trader:
         elif strike_price == 9500:
             misprice_rate = 2.5  # For higher-delta options
 
-
-        expiration_time = 5 / 252  # Approx. time to expiry
+        ######  days left at beginning of round + 1
+        expiration_time = 7_000_000 + (1_000_000 - self.state.timestamp) / 1_000_000
         
         # Calculate GARCH volatility if we have enough underlying price history
         if "VOLCANIC_ROCK" in self.BIDS and len(self.BIDS["VOLCANIC_ROCK"]) > 30:
@@ -803,7 +803,7 @@ class Trader:
         forecast_var = omega + alpha * returns[-1]**2 + beta * sigma2[-1]
         
         # Convert to annualized volatility (assuming returns are daily)
-        annualized_vol = np.sqrt(forecast_var * 252)
+        annualized_vol = np.sqrt(forecast_var * 1_000_000)
         
         return annualized_vol
         
