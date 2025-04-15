@@ -248,11 +248,7 @@ class Trader:
             if "VOUCHER" in product:
                 # Extract strike price from product name (e.g., "VOLCANIC_ROCK_VOUCHER_9500" -> 9500)
                 strike_price = float(product.split("_")[-1])
-                # Define a volatility value (you'll need to determine the appropriate value)
-                volatility = 0.2  # Example value, adjust based on your strategy
-                orders = COMPUTE_ORDERS[product](product, order_depth, volatility, strike_price)
-            else:
-                orders = COMPUTE_ORDERS[product](product, order_depth)
+                orders = COMPUTE_ORDERS[product](product, order_depth,strike_price)
             
             result[product] = orders
     
@@ -640,7 +636,7 @@ class Trader:
         return orders
     
     
-    def compute_orders_options(self, PRODUCT, order_depth, volatility, strike_price):
+    def compute_orders_options(self, PRODUCT, order_depth, strike_price):
         orders: list[Order] = []
         
         ordered_sell_dict = collections.OrderedDict(sorted(order_depth.sell_orders.items()))
@@ -674,8 +670,6 @@ class Trader:
                 underlying_price = underlying_bid
             elif underlying_ask:
                 underlying_price = underlying_ask
-            else:
-                underlying_price = strike_price  # Fallback
 
         # Calculate option's bid/ask values
         if ordered_buy_dict:
@@ -692,11 +686,27 @@ class Trader:
         if option_bid and option_ask:
             mid_price = (option_bid + option_ask) / 2
         elif option_bid:
-            mid_price = option_bid
+            mid_price = option_bid + 0.5
         elif option_ask:
-            mid_price = option_ask
+            mid_price = option_ask - 0.5
         else:
             mid_price = None  # Will be filled in later
+            
+            
+        # Determine trading signals based on misprice rate and volatility(before we hit 30 data points) per strike price
+        volatility = 2.0
+        misprice_rate = 1        
+        if strike_price == 10500:
+            misprice_rate = 0.6  # For lower-delta options
+        elif strike_price == 10250:
+            misprice_rate = 0.85  # For medium-delta options
+        elif strike_price == 10000:
+            misprice_rate = 1.25  # For ATM options
+        elif strike_price == 9750:
+            misprice_rate = 2.0  # For medium-delta options
+        elif strike_price == 9500:
+            misprice_rate = 2.5  # For higher-delta options
+
 
         expiration_time = 5 / 252  # Approx. time to expiry
         
@@ -718,20 +728,9 @@ class Trader:
         # If we couldn't calculate mid_price earlier, use our Black-Scholes estimate
         if mid_price is None:
             mid_price = fair_price
+            
         
-        # Determine trading signals based on misprice rate per strike price
-        misprice_rate = 1        
-        if strike_price == 10500:
-            misprice_rate = 0.6  # For lower-delta options
-        elif strike_price == 10250:
-            misprice_rate = 0.85  # For medium-delta options
-        elif strike_price == 10000:
-            misprice_rate = 1.25  # For ATM options
-        elif strike_price == 9750:
-            misprice_rate = 2.0  # For medium-delta options
-        elif strike_price == 9500:
-            misprice_rate = 2.5  # For higher-delta options
-        
+
         # Use bid/ask for more accurate entry points
         short_condition = fair_price + misprice_rate
         long_condition = fair_price - misprice_rate

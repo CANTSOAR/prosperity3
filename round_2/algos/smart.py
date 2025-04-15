@@ -135,7 +135,6 @@ class Trader:
         "DJEMBES": 60,
         "PICNIC_BASKET1": 60,
         "PICNIC_BASKET2": 100
-        
     }
 
     BIDS = {
@@ -211,6 +210,9 @@ class Trader:
         self.populate_prices()
 
         for product in [
+            "RAINFOREST_RESIN",
+            "SQUID_INK",
+            "KELP",
             "PICNIC_BASKET1",
             "PICNIC_BASKET2"
         ]:
@@ -440,7 +442,7 @@ class Trader:
         bid_z_score = (bid_spread - bid_spread.mean()) / bid_spread.std()
         ask_z_score = (ask_spread - ask_spread.mean()) / ask_spread.std()
 
-        z_score_reversal_threshold = 1.75
+        z_score_reversal_threshold = 1.8
 
         long_reversal_entry = ask_z_score[-1] < -z_score_reversal_threshold and ask_z_score[-2] > -z_score_reversal_threshold
         short_reversal_entry = ask_z_score[-1] > z_score_reversal_threshold and ask_z_score[-2] < z_score_reversal_threshold
@@ -500,7 +502,7 @@ class Trader:
         bid_z_score = (bid_spread - bid_spread.mean()) / bid_spread.std()
         ask_z_score = (ask_spread - ask_spread.mean()) / ask_spread.std()
 
-        z_score_reversal_threshold = 1.75
+        z_score_reversal_threshold = 1.6
 
         long_reversal_entry = ask_z_score[-1] < -z_score_reversal_threshold and ask_z_score[-2] > -z_score_reversal_threshold
         short_reversal_entry = ask_z_score[-1] > z_score_reversal_threshold and ask_z_score[-2] < z_score_reversal_threshold

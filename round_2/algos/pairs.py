@@ -501,13 +501,13 @@ class Trader:
         logger.print(short_push_entry, short_reversal_entry)
         logger.print(exit, current_pos) 
 
-        for ask, vol in list(ordered_sell_dict.items())[:1]:
+        for ask, vol in list(ordered_sell_dict.items()):
             if (long_reversal_entry or long_push_entry) and current_pos < self.LIMITS[PRODUCT] or (exit and current_pos < 0):
                 order_vol = min(-vol, self.LIMITS[PRODUCT] - current_pos)
                 orders.append(Order(PRODUCT, ask, order_vol))
                 current_pos += order_vol
 
-        for bid, vol in list(ordered_buy_dict.items())[:1]:
+        for bid, vol in list(ordered_buy_dict.items()):
             if (short_reversal_entry or short_push_entry) and current_pos > -self.LIMITS[PRODUCT] or (exit and current_pos > 0):
                 order_vol = max(-vol, -self.LIMITS[PRODUCT] - current_pos)
                 orders.append(Order(PRODUCT, bid, order_vol))
