@@ -708,7 +708,7 @@ class Trader:
             misprice_rate = 2.5  # For higher-delta options
 
 
-        expiration_time = 5 / 252  # Approx. time to expiry
+        expiration_time = 7 / 252  # Approx. time to expiry
         
         # Calculate GARCH volatility if we have enough underlying price history
         if "VOLCANIC_ROCK" in self.BIDS and len(self.BIDS["VOLCANIC_ROCK"]) > 30:
@@ -724,11 +724,7 @@ class Trader:
         else:
             # Fall back to fixed volatility when insufficient data
             fair_price = self.black_scholes(underlying_price, strike_price, expiration_time, 0, volatility)
-        
-        # If we couldn't calculate mid_price earlier, use our Black-Scholes estimate
-        if mid_price is None:
-            mid_price = fair_price
-            
+                
         
 
         # Use bid/ask for more accurate entry points
