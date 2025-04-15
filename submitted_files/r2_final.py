@@ -464,7 +464,7 @@ class Trader:
                 current_pos += order_vol
                 pos_change += order_vol
 
-        if pos_change:
+        """if pos_change:
             for COMPONENT, factor in zip(COMPONENTS, [6, 3, 1]):
                 order_depth = self.state.order_depths[COMPONENT]
 
@@ -485,7 +485,7 @@ class Trader:
                         order_vol = min(-pos_change * factor, self.LIMITS[COMPONENT] - comp_current_pos)
                         if exit: order_vol = min(-vol, -current_pos * factor)
                         orders.append(Order(COMPONENT, ask, order_vol))
-                        comp_current_pos += order_vol
+                        comp_current_pos += order_vol"""
 
         return orders
    
@@ -544,7 +544,7 @@ class Trader:
                 current_pos += order_vol
                 pos_change += order_vol
 
-        if pos_change:
+        """if pos_change:
             for COMPONENT, factor in zip(COMPONENTS, [4, 2]):
                 order_depth = self.state.order_depths[COMPONENT]
 
@@ -565,7 +565,7 @@ class Trader:
                         order_vol = min(-pos_change * factor, self.LIMITS[COMPONENT] - comp_current_pos)
                         if exit: order_vol = min(-vol, -current_pos * factor)
                         orders.append(Order(COMPONENT, ask, order_vol))
-                        comp_current_pos += order_vol
+                        comp_current_pos += order_vol"""
 
         return orders
     

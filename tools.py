@@ -715,6 +715,8 @@ class Log_Analysis:
 
 if __name__ == "__main__":
     pray = Log_Analysis()
-    pray.analyse("CROISSANTS")
-    pray.analyse("JAMS")
-    pray.analyse("DJEMBES")
+    pray.analyse("VOLCANIC_ROCK_VOUCHER_9500")
+    pray.analyse("VOLCANIC_ROCK_VOUCHER_9750")
+    pray.analyse("VOLCANIC_ROCK_VOUCHER_10000")
+    pray.analyse("VOLCANIC_ROCK_VOUCHER_10250")
+    pray.analyse("VOLCANIC_ROCK_VOUCHER_10500")
