@@ -694,7 +694,7 @@ class Trader:
             
             
         # Determine trading signals based on misprice rate and volatility(before we hit 30 data points) per strike price
-        volatility = 2.0
+        volatility = 0.0002684057950003249 * (10_000**(1/2))
         misprice_rate = 1        
         if strike_price == 10500:
             misprice_rate = 0.6  # For lower-delta options
@@ -708,7 +708,7 @@ class Trader:
             misprice_rate = 2.5  # For higher-delta options
 
         ######  days left at beginning of round + 1
-        expiration_time = 7_000_000 + (1_000_000 - self.state.timestamp) / 1_000_000
+        expiration_time = ((7_000_000 + (1_000_000 - self.state.timestamp)) / 1_000_000)
         
         # Calculate GARCH volatility if we have enough underlying price history
         if "VOLCANIC_ROCK" in self.BIDS and len(self.BIDS["VOLCANIC_ROCK"]) > 30:
@@ -720,15 +720,13 @@ class Trader:
             garch_volatility = self.fit_garch_and_forecast(returns)
             
             # Use GARCH volatility instead of fixed volatility
-            fair_price = self.black_scholes(underlying_price, strike_price, expiration_time, 0, vol)
+            logger.print("underlying:", underlying_price, "strike:", strike_price, "expiration:", expiration_time, "riskfree = 0", "volatility=", volatility)
+            fair_price = self.black_scholes(underlying_price, strike_price, expiration_time, 0, volatility)
         else:
             # Fall back to fixed volatility when insufficient data
+            logger.print("underlying:", underlying_price, "strike:", strike_price, "expiration:", expiration_time, "riskfree = 0", "volatility=", volatility)
             fair_price = self.black_scholes(underlying_price, strike_price, expiration_time, 0, volatility)
-        
-        # If we couldn't calculate mid_price earlier, use our Black-Scholes estimate
-        if mid_price is None:
-            mid_price = fair_price
-            
+                
         
 
         # Use bid/ask for more accurate entry points

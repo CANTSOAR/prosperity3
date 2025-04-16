@@ -200,21 +200,21 @@ class Trader:
         self.POSITIONS = state.position
 
         COMPUTE_ORDERS = {
-            "RAINFOREST_RESIN": self.compute_orders_resin,
-            "SQUID_INK": self.compute_orders_ink,
-            "KELP": self.compute_orders_kelp,
-            "PICNIC_BASKET1": self.compute_orders_basket_1,
-            "PICNIC_BASKET2": self.compute_orders_basket_2,
+            #"RAINFOREST_RESIN": self.compute_orders_resin,
+            #"SQUID_INK": self.compute_orders_ink,
+            #"KELP": self.compute_orders_kelp,
+            "PICNIC_BASKET1": self.compute_orders_basket_1
+            #"PICNIC_BASKET2": self.compute_orders_basket_2,
         }
 
         self.populate_prices()
 
         for product in [
-            "RAINFOREST_RESIN",
-            "SQUID_INK",
-            "KELP",
-            "PICNIC_BASKET1",
-            "PICNIC_BASKET2"
+            #"RAINFOREST_RESIN",
+            #"SQUID_INK",
+            #"KELP",
+            "PICNIC_BASKET1"
+            #"PICNIC_BASKET2",
         ]:
             order_depth: OrderDepth = state.order_depths[product]
             orders = COMPUTE_ORDERS[product](product, order_depth)
@@ -436,15 +436,12 @@ class Trader:
         ask_z_score = (ask_spread[-2:] - ask_spread.mean()) / ask_spread.std()
 
         z_score_reversal_threshold = 1.75
-
+        logger.print("z score:", ask_z_score)
         long_reversal_entry = ask_z_score[-1] < -z_score_reversal_threshold and ask_z_score[-2] > -z_score_reversal_threshold
         short_reversal_entry = ask_z_score[-1] > z_score_reversal_threshold and ask_z_score[-2] < z_score_reversal_threshold
 
         exit = current_pos * ask_z_score[-1] > 0 or current_pos * bid_z_score[-1] > 0
 
-        logger.print(bid_z_score[-1], ask_z_score[-1])
-        logger.print(long_reversal_entry, short_reversal_entry)
-        logger.print(exit, current_pos) 
 
         pos_change = 0
 
@@ -464,28 +461,31 @@ class Trader:
                 current_pos += order_vol
                 pos_change += order_vol
 
-        """if pos_change:
+        if pos_change:
             for COMPONENT, factor in zip(COMPONENTS, [6, 3, 1]):
+                logger.print(COMPONENT)
                 order_depth = self.state.order_depths[COMPONENT]
 
-                ordered_sell_dict = collections.OrderedDict(sorted(order_depth.sell_orders.items()))
-                ordered_buy_dict = collections.OrderedDict(sorted(order_depth.buy_orders.items(), reverse=True))
+                ordered_sell_dictC = collections.OrderedDict(sorted(order_depth.sell_orders.items()))
+                ordered_buy_dictC = collections.OrderedDict(sorted(order_depth.buy_orders.items(), reverse=True))
 
                 comp_current_pos = self.POSITIONS.get(COMPONENT, 0)
 
                 if (long_reversal_entry and current_pos < self.LIMITS[PRODUCT]) or (exit and current_pos < 0):
-                    for bid, vol in list(ordered_buy_dict.items())[:1]:
+                    for bidC, volC in list(ordered_buy_dictC.items())[:1]:
                         order_vol = max(-pos_change * factor, -self.LIMITS[COMPONENT] - comp_current_pos)
-                        if exit: order_vol = max(-vol, -current_pos * factor)
-                        orders.append(Order(COMPONENT, bid, order_vol))
+                        logger.print(order_vol)
+                        if exit: order_vol = max(-volC, -current_pos * factor)
+                        orders.append(Order(COMPONENT, bidC, order_vol))
                         comp_current_pos += order_vol
 
                 if (short_reversal_entry and current_pos > -self.LIMITS[PRODUCT]) or (exit and current_pos > 0):
-                    for ask, vol in list(ordered_sell_dict.items())[:1]:
+                    for askC, volC in list(ordered_sell_dictC.items())[:1]:
                         order_vol = min(-pos_change * factor, self.LIMITS[COMPONENT] - comp_current_pos)
-                        if exit: order_vol = min(-vol, -current_pos * factor)
-                        orders.append(Order(COMPONENT, ask, order_vol))
-                        comp_current_pos += order_vol"""
+                        logger.print(order_vol)
+                        if exit: order_vol = min(-volC, -current_pos * factor)
+                        orders.append(Order(COMPONENT, askC, order_vol))
+                        comp_current_pos += order_vol
 
         return orders
    
@@ -544,7 +544,7 @@ class Trader:
                 current_pos += order_vol
                 pos_change += order_vol
 
-        """if pos_change:
+        if pos_change:
             for COMPONENT, factor in zip(COMPONENTS, [4, 2]):
                 order_depth = self.state.order_depths[COMPONENT]
 
@@ -565,7 +565,7 @@ class Trader:
                         order_vol = min(-pos_change * factor, self.LIMITS[COMPONENT] - comp_current_pos)
                         if exit: order_vol = min(-vol, -current_pos * factor)
                         orders.append(Order(COMPONENT, ask, order_vol))
-                        comp_current_pos += order_vol"""
+                        comp_current_pos += order_vol
 
         return orders
     
