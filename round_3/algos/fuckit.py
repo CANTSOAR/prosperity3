@@ -720,7 +720,7 @@ class Trader:
             garch_volatility = self.fit_garch_and_forecast(returns)
             
             # Use GARCH volatility instead of fixed volatility
-            fair_price = self.black_scholes(underlying_price, strike_price, expiration_time, 0, garch_volatility)
+            fair_price = self.black_scholes(underlying_price, strike_price, expiration_time, 0, vol)
         else:
             # Fall back to fixed volatility when insufficient data
             fair_price = self.black_scholes(underlying_price, strike_price, expiration_time, 0, volatility)
