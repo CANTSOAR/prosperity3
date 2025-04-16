@@ -195,7 +195,7 @@ class Trader:
     def run(self, state: TradingState):
         # Only method required. It takes all buy and sell orders for all symbols as an input, and outputs a list of orders to be sent
         self.exit = False
-        result = {}
+        self.result = {}
         self.state = state
         self.POSITIONS = state.position
 
@@ -219,13 +219,13 @@ class Trader:
             order_depth: OrderDepth = state.order_depths[product]
             orders = COMPUTE_ORDERS[product](product, order_depth)
             
-            result[product] = orders
+            self.result[product] = orders
     
         traderData = "SAMPLE" # String value holding Trader state data required. It will be delivered as TradingState.traderData on next execution.
         
         conversions = 0
-        logger.flush(state, result, conversions, traderData)
-        return result, conversions, traderData
+        logger.flush(state, self.result, conversions, traderData)
+        return self.result, conversions, traderData
 
     def compute_orders_resin(self, PRODUCT, order_depth):
         """
@@ -463,8 +463,8 @@ class Trader:
 
         if pos_change:
             for COMPONENT, factor in zip(COMPONENTS, [6, 3, 1]):
-                logger.print(COMPONENT)
                 order_depth = self.state.order_depths[COMPONENT]
+                self.result[COMPONENT] = []
 
                 ordered_sell_dictC = collections.OrderedDict(sorted(order_depth.sell_orders.items()))
                 ordered_buy_dictC = collections.OrderedDict(sorted(order_depth.buy_orders.items(), reverse=True))
@@ -476,7 +476,7 @@ class Trader:
                         order_vol = max(-pos_change * factor, -self.LIMITS[COMPONENT] - comp_current_pos)
                         logger.print(order_vol)
                         if exit: order_vol = max(-volC, -current_pos * factor)
-                        orders.append(Order(COMPONENT, bidC, order_vol))
+                        self.result[COMPONENT].append(Order(COMPONENT, bidC, order_vol))
                         comp_current_pos += order_vol
 
                 if (short_reversal_entry and current_pos > -self.LIMITS[PRODUCT]) or (exit and current_pos > 0):
@@ -484,7 +484,7 @@ class Trader:
                         order_vol = min(-pos_change * factor, self.LIMITS[COMPONENT] - comp_current_pos)
                         logger.print(order_vol)
                         if exit: order_vol = min(-volC, -current_pos * factor)
-                        orders.append(Order(COMPONENT, askC, order_vol))
+                        self.result[COMPONENT].append(Order(COMPONENT, askC, order_vol))
                         comp_current_pos += order_vol
 
         return orders
@@ -532,7 +532,7 @@ class Trader:
             if (long_reversal_entry and current_pos < self.LIMITS[PRODUCT]) or (exit and current_pos < 0):
                 order_vol = min(-vol, self.LIMITS[PRODUCT] - current_pos)
                 if exit: order_vol = min(-vol, -current_pos)
-                orders.append(Order(PRODUCT, ask, order_vol))
+                self.result[COMPONENT].append(Order(PRODUCT, ask, order_vol))
                 current_pos += order_vol
                 pos_change += order_vol
 
@@ -540,13 +540,14 @@ class Trader:
             if (short_reversal_entry and current_pos > -self.LIMITS[PRODUCT]) or (exit and current_pos > 0):
                 order_vol = max(-vol, -self.LIMITS[PRODUCT] - current_pos)
                 if exit: order_vol = max(-vol, -current_pos)
-                orders.append(Order(PRODUCT, bid, order_vol))
+                self.result[COMPONENT].append(Order(PRODUCT, bid, order_vol))
                 current_pos += order_vol
                 pos_change += order_vol
 
         if pos_change:
             for COMPONENT, factor in zip(COMPONENTS, [4, 2]):
                 order_depth = self.state.order_depths[COMPONENT]
+                self.result[COMPONENT] = []
 
                 ordered_sell_dict = collections.OrderedDict(sorted(order_depth.sell_orders.items()))
                 ordered_buy_dict = collections.OrderedDict(sorted(order_depth.buy_orders.items(), reverse=True))
