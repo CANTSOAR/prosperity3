@@ -1,5 +1,6 @@
 from typing import List
 import string
+import math
 import collections
 import json
 from typing import Any
@@ -134,7 +135,14 @@ class Trader:
         "JAMS": 350,
         "DJEMBES": 60,
         "PICNIC_BASKET1": 60,
-        "PICNIC_BASKET2": 100
+        "PICNIC_BASKET2": 100,
+        "VOLCANIC_ROCK": 400,
+        "VOLCANIC_ROCK_VOUCHER_9500": 200,
+        "VOLCANIC_ROCK_VOUCHER_9750": 200,
+        "VOLCANIC_ROCK_VOUCHER_10000": 200,
+        "VOLCANIC_ROCK_VOUCHER_10250": 200,
+        "VOLCANIC_ROCK_VOUCHER_10500": 200,
+
     }
 
     BIDS = {
@@ -145,7 +153,13 @@ class Trader:
         "JAMS": [],
         "DJEMBES": [],
         "PICNIC_BASKET1": [],
-        "PICNIC_BASKET2": []
+        "PICNIC_BASKET2": [],
+        "VOLCANIC_ROCK": [],
+        "VOLCANIC_ROCK_VOUCHER_9500": [],
+        "VOLCANIC_ROCK_VOUCHER_9750": [],
+        "VOLCANIC_ROCK_VOUCHER_10000": [],
+        "VOLCANIC_ROCK_VOUCHER_10250": [],
+        "VOLCANIC_ROCK_VOUCHER_10500": [],
     }
 
     ASKS = {
@@ -156,7 +170,13 @@ class Trader:
         "JAMS": [],
         "DJEMBES": [],
         "PICNIC_BASKET1": [],
-        "PICNIC_BASKET2": []
+        "PICNIC_BASKET2": [],
+        "VOLCANIC_ROCK": [],
+        "VOLCANIC_ROCK_VOUCHER_9500": [],
+        "VOLCANIC_ROCK_VOUCHER_9750": [],
+        "VOLCANIC_ROCK_VOUCHER_10000": [],
+        "VOLCANIC_ROCK_VOUCHER_10250": [],
+        "VOLCANIC_ROCK_VOUCHER_10500": [],
     }
 
     kelp_last_bid = 2028
@@ -180,14 +200,33 @@ class Trader:
         return tot_vol, best_val
     
     def populate_prices(self):
-        for COMPONENT in ["CROISSANTS", "JAMS", "DJEMBES", "PICNIC_BASKET1", "PICNIC_BASKET2"]:
+        for COMPONENT in [
+            "CROISSANTS",
+            "JAMS",
+            "DJEMBES",
+            "PICNIC_BASKET1",
+            "PICNIC_BASKET2",
+            "VOLCANIC_ROCK",
+            "VOLCANIC_ROCK_VOUCHER_9500",
+            "VOLCANIC_ROCK_VOUCHER_9750",
+            "VOLCANIC_ROCK_VOUCHER_10000",
+            "VOLCANIC_ROCK_VOUCHER_10250",
+            "VOLCANIC_ROCK_VOUCHER_10500",
+            ]:
             component_order_depth = self.state.order_depths[COMPONENT]
 
             ordered_sell_dict = collections.OrderedDict(sorted(component_order_depth.sell_orders.items()))
             ordered_buy_dict = collections.OrderedDict(sorted(component_order_depth.buy_orders.items(), reverse=True))
 
-            best_ask = [ask for ask, _ in ordered_sell_dict.items()][0]
-            best_bid = [bid for bid, _ in ordered_buy_dict.items()][0]
+            if len(ordered_sell_dict.items()):
+                best_ask = [ask for ask, _ in ordered_sell_dict.items()][0]
+            else:
+                best_ask = self.ASKS[COMPONENT][-1]
+
+            if len(ordered_buy_dict.items()):
+                best_bid = [bid for bid, _ in ordered_buy_dict.items()][0]
+            else:
+                best_bid = self.BIDS[COMPONENT][-1]
 
             self.ASKS[COMPONENT].append(best_ask)
             self.BIDS[COMPONENT].append(best_bid)
@@ -200,11 +239,16 @@ class Trader:
         self.POSITIONS = state.position
 
         COMPUTE_ORDERS = {
-            #"RAINFOREST_RESIN": self.compute_orders_resin,
-            #"SQUID_INK": self.compute_orders_ink,
-            #"KELP": self.compute_orders_kelp,
-            "PICNIC_BASKET1": self.compute_orders_basket_1
-            #"PICNIC_BASKET2": self.compute_orders_basket_2,
+            "RAINFOREST_RESIN": self.compute_orders_resin,
+            "SQUID_INK": self.compute_orders_ink,
+            "KELP": self.compute_orders_kelp,
+            "PICNIC_BASKET1": self.compute_orders_basket_1,
+            "PICNIC_BASKET2": self.compute_orders_basket_2,
+            "VOLCANIC_ROCK_VOUCHER_9500": self.compute_orders_options,
+            "VOLCANIC_ROCK_VOUCHER_9750": self.compute_orders_options,
+            "VOLCANIC_ROCK_VOUCHER_10000": self.compute_orders_options,
+            "VOLCANIC_ROCK_VOUCHER_10250": self.compute_orders_options,
+            "VOLCANIC_ROCK_VOUCHER_10500": self.compute_orders_options,
         }
 
         self.populate_prices()
@@ -213,8 +257,13 @@ class Trader:
             #"RAINFOREST_RESIN",
             #"SQUID_INK",
             #"KELP",
-            "PICNIC_BASKET1"
+            #"PICNIC_BASKET1",
             #"PICNIC_BASKET2",
+            "VOLCANIC_ROCK_VOUCHER_9500",
+            "VOLCANIC_ROCK_VOUCHER_9750",
+            "VOLCANIC_ROCK_VOUCHER_10000",
+            "VOLCANIC_ROCK_VOUCHER_10250",
+            "VOLCANIC_ROCK_VOUCHER_10500",
         ]:
             order_depth: OrderDepth = state.order_depths[product]
             orders = COMPUTE_ORDERS[product](product, order_depth)
@@ -644,3 +693,196 @@ class Trader:
         orders.append(Order(PRODUCT, best_bid + 1, int((-self.LIMITS[PRODUCT] - current_pos) * .7)))
 
         return orders
+    
+    def compute_orders_options(self, PRODUCT, order_depth):
+        orders: list[Order] = []
+
+        s = (self.ASKS["VOLCANIC_ROCK"][-1] + self.BIDS["VOLCANIC_ROCK"][-1]) / 2
+        k = int(PRODUCT[len("VOLCANIC_ROCK_VOUCHER_"):])
+        tte = 8 - self.state.timestamp / 1_000_000
+        
+        price = (self.ASKS[PRODUCT][-1] + self.BIDS[PRODUCT][-1]) / 2
+
+        iv = implied_volatility(
+            option_price = price,
+            S = s,
+            K = k,
+            T = tte
+        )
+
+        m = s / k
+        fair_iv = fitted_vol_surface(m, tte)
+
+        logger.print(iv, fair_iv)
+
+        ordered_sell_dict = collections.OrderedDict(sorted(order_depth.sell_orders.items()))
+        ordered_buy_dict = collections.OrderedDict(sorted(order_depth.buy_orders.items(), reverse=True))
+
+        current_pos = self.POSITIONS.get(PRODUCT, 0)
+
+        short_entry = iv > fair_iv
+        long_entry = iv < fair_iv
+
+        for ask, vol in ordered_sell_dict.items():
+            if long_entry and current_pos < self.LIMITS[PRODUCT]:
+                order_vol = min(-vol, self.LIMITS[PRODUCT] - current_pos) # take the minimum of available volume and the volume we are allowed to take
+                orders.append(Order(PRODUCT, ask, order_vol)) # this is a BUY order, we undercut by paying a little MORE
+                current_pos += order_vol
+
+        for bid, vol in ordered_buy_dict.items():
+            if short_entry and current_pos > -self.LIMITS[PRODUCT]:
+                order_vol = max(-vol, -self.LIMITS[PRODUCT] - current_pos) # take the minimum of available volume and the volume we are allowed to take
+                orders.append(Order(PRODUCT, bid, order_vol)) # this is a SELL order, we undercut by selling a bit CHEAPER
+                current_pos += order_vol
+
+        return orders
+
+
+#HELPERS FOR OPTIONS
+#coeffs:
+a = -520.7789
+b = 136.4477
+c = -1.3798
+d = -1.6741
+e = -0.0862
+f = 0.0078
+g = -59.7515
+h = 137.5158
+i = 4.0776
+j = -1.6268
+
+def improved_log_vol_surface_func(X, a, b, c, d, e, f, g, h, i, j):
+    log_m, t = X  # log_moneyness and time to expiry
+    return (a * log_m**3 +
+            b * log_m**2 +
+            c * log_m +
+            d +
+            e * t +
+            f * t**2 +
+            g * np.exp(-h * t) * np.sqrt(t) +
+            i * log_m * np.sqrt(t) +
+            j * log_m * t)
+
+def fitted_vol_surface(m, t):
+    # Convert original moneyness to log-moneyness
+    log_m = np.log(m)
+    log_iv = improved_log_vol_surface_func((log_m, t), a, b, c, d, e, f, g, h, i, j)
+    return np.exp(log_iv)
+
+def norm_cdf(x):
+    """Standard normal cumulative distribution function."""
+    return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
+
+def black_scholes_price(S, K, r, q, sigma, T, option_type):
+    """Calculate Black-Scholes price for a single option.
+    
+    Args:
+        S: Underlying price
+        K: Strike price 
+        r: Risk-free rate (annual)
+        q: Dividend yield (annual)
+        sigma: Volatility (annual)
+        T: Time to expiration (in days)
+        option_type: 1 for call, -1 for put
+    
+    Returns:
+        Option price
+    """
+    # CHANGED: Convert from days to years for calculations
+    days_per_year = 365
+    T_years = T / days_per_year
+    
+    if sigma <= 0.0001 or T_years <= 0.0001:  # Check for very small values
+        if option_type == 1:  # Call option
+            return max(0, S - K)  # Return intrinsic value
+        else:  # Put option
+            return max(0, K - S)
+        
+    # CHANGED: Use T_years in the calculations
+    d1 = (math.log(S / K) + (r - q + 0.5 * sigma * sigma) * T_years) / (sigma * math.sqrt(T_years))
+    d2 = d1 - sigma * math.sqrt(T_years)
+    
+    if option_type == 1:  # Call option
+        # CHANGED: Use T_years in the calculations
+        return S * math.exp(-q * T_years) * norm_cdf(d1) - K * math.exp(-r * T_years) * norm_cdf(d2)
+    else:  # Put option
+        # CHANGED: Use T_years in the calculations
+        return K * math.exp(-r * T_years) * norm_cdf(-d2) - S * math.exp(-q * T_years) * norm_cdf(-d1)
+
+def black_scholes_vega(S, K, r, q, sigma, T, option_type):
+    """Calculate vega for a single option using Black-Scholes model.
+    
+    Args:
+        Same as black_scholes_price
+    
+    Returns:
+        Option vega
+    """
+    # CHANGED: Convert from days to years for calculations
+    days_per_year = 365
+    T_years = T / days_per_year
+    
+    if sigma <= 0 or T <= 0:
+        return 0.0
+        
+    # CHANGED: Use T_years in the calculations
+    d1 = (math.log(S / K) + (r - q + 0.5 * sigma * sigma) * T_years) / (sigma * math.sqrt(T_years))
+    # CHANGED: Use T_years in the calculations
+    return S * math.exp(-q * T_years) * math.sqrt(T_years) * norm_cdf(d1)
+
+def implied_volatility(option_price, S, K, T, r=0, q=0, option_type=1, 
+                      max_iterations=100, precision=1e-8):
+    """Calculate implied volatility using Newton-Raphson method for a single option.
+    
+    Args:
+        option_price: The market price of the option
+        S: Underlying price
+        K: Strike price
+        r: Risk-free rate (annual)
+        q: Dividend yield (annual)
+        T: Time to expiration in days
+        option_type: 1 for call, -1 for put
+        max_iterations: Maximum number of iterations
+        precision: Desired precision
+        
+    Returns:
+        Implied volatility (annual)
+    """
+    # CHANGED: Convert from days to years for calculations
+    days_per_year = 365
+    T_years = T / days_per_year
+    
+    # CHANGED: Use T_years in the calculations
+    # Initial guess - use Brenner-Subrahmanyam approximation
+    sigma = math.sqrt(2 * math.pi / T_years) * (option_price / S)
+    
+    # Ensure minimum volatility for numerical stability
+    sigma = max(sigma, 0.001)
+    
+    # Newton-Raphson iterations
+    for _ in range(max_iterations):
+        # Calculate option price and vega with current sigma
+        price = black_scholes_price(S, K, r, q, sigma, T, option_type)
+        vega = black_scholes_vega(S, K, r, q, sigma, T, option_type)
+        
+        # To avoid division by zero
+        vega = max(vega, 1e-8)
+        
+        # Calculate the difference and update sigma
+        diff = option_price - price
+        update = diff / vega
+        
+        # Limit large updates for stability
+        update = max(min(update, 0.5), -0.5)
+        
+        # Update sigma
+        sigma = sigma + update
+        
+        # Ensure sigma remains positive
+        sigma = max(sigma, 0.001)
+        
+        # Check for convergence
+        if abs(diff) < precision:
+            break
+    
+    return sigma
